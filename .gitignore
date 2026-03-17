@@ -1,0 +1,10 @@
+﻿build/
+.dart_tool/
+.pub-cache/
+.pub/
+android/app/debug/
+ios/Flutter/Generated.xcconfig
+ios/Pods/
+*.uploaded64
+*.exe
+*.apk
