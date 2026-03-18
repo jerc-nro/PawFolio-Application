@@ -88,42 +88,6 @@ class _PetInfoCardState extends State<PetInfoCard> {
     }
   }
 
-  /// "🎂 in X days" or "🎂 Today!" banner
-  Widget _birthdayBanner(String birthDate) {
-    final dob = DateTime.tryParse(birthDate);
-    if (dob == null) return const SizedBox.shrink();
-    final now  = DateTime.now();
-    var next   = DateTime(now.year, dob.month, dob.day);
-    if (next.isBefore(DateTime(now.year, now.month, now.day))) {
-      next = DateTime(now.year + 1, dob.month, dob.day);
-    }
-    final days = next.difference(DateTime(now.year, now.month, now.day)).inDays;
-    final isToday = days == 0;
-    return Container(
-      margin: const EdgeInsets.only(top: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: isToday
-            ? kBrown.withOpacity(0.12)
-            : kNavy.withOpacity(0.07),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: isToday
-            ? kBrown.withOpacity(0.3) : kDivider),
-      ),
-      child: Row(children: [
-        Text(isToday ? '🎂' : '🎁', style: const TextStyle(fontSize: 14)),
-        const SizedBox(width: 6),
-        Text(
-          isToday ? 'Birthday today! 🎉'
-              : 'Birthday in $days day${days == 1 ? '' : 's'}',
-          style: TextStyle(
-            fontSize: 12, fontWeight: FontWeight.w600,
-            color: isToday ? kBrown : kNavy),
-        ),
-      ]),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final e = widget.editMode;
@@ -163,7 +127,6 @@ class _PetInfoCardState extends State<PetInfoCard> {
                 ))
             : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 ValueText(widget.birthDate),
-                _birthdayBanner(widget.birthDate),
               ])),
         LabeledField(label: 'Weight',
           child: e

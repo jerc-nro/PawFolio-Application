@@ -6,7 +6,7 @@ class PetHealthCard extends StatefulWidget {
   final bool sterilization, vaccinated;
   final String vaccineDetails, description;
   final bool editMode;
-  final String ownerID, petID; // needed to stream vaccine names
+  final String ownerID, petID;
   final void Function(Map<String, dynamic>) onChanged;
 
   const PetHealthCard({
@@ -23,152 +23,147 @@ class PetHealthCard extends StatefulWidget {
 }
 
 class _PetHealthCardState extends State<PetHealthCard> {
-  late TextEditingController _vaccineDetailsCtrl, _descCtrl;
-  late bool _sterilization, _vaccinated;
+  late TextEditingController _descCtrl;
+  late bool _sterilization;
 
   @override
   void initState() {
     super.initState();
-    _vaccineDetailsCtrl = TextEditingController(text: widget.vaccineDetails);
-    _descCtrl           = TextEditingController(text: widget.description);
-    _sterilization      = widget.sterilization;
-    _vaccinated         = widget.vaccinated;
+    _descCtrl      = TextEditingController(text: widget.description);
+    _sterilization = widget.sterilization;
   }
 
   @override
   void didUpdateWidget(PetHealthCard old) {
     super.didUpdateWidget(old);
     if (!widget.editMode && old.editMode) {
-      _vaccineDetailsCtrl.text = widget.vaccineDetails;
-      _descCtrl.text           = widget.description;
-      _sterilization           = widget.sterilization;
-      _vaccinated              = widget.vaccinated;
+      _descCtrl.text = widget.description;
+      _sterilization = widget.sterilization;
     }
   }
 
   @override
   void dispose() {
-    _vaccineDetailsCtrl.dispose();
     _descCtrl.dispose();
     super.dispose();
   }
 
-  void _emit() => widget.onChanged({
+  void _emit({required bool vaccinated}) => widget.onChanged({
     'sterilization' : _sterilization,
-    'vaccinated'    : _vaccinated,
-    'vaccineDetails': _vaccineDetailsCtrl.text.trim(),
+    'vaccinated'    : vaccinated,
+    'vaccineDetails': widget.vaccineDetails, // preserved as-is
     'description'   : _descCtrl.text.trim(),
   });
 
-  /// Streams vaccine names from Firestore vaccinations subcollection
-  Widget _vaccineNamesFromRecords() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users').doc(widget.ownerID)
-          .collection('pets').doc(widget.petID)
-          .collection('vaccinations')
-          .orderBy('date_timestamp', descending: true)
-          .snapshots(),
-      builder: (_, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const SizedBox(
-            height: 16,
-            child: LinearProgressIndicator(color: kNavy));
-        }
-        final docs = snap.data?.docs ?? [];
-        if (docs.isEmpty) {
-          return ValueText(widget.vaccineDetails.isEmpty
-              ? '—' : widget.vaccineDetails);
-        }
-        // Deduplicate vaccine names
-        final names = docs
-            .map((d) => (d.data() as Map)['vaccine_name']?.toString() ?? '')
-            .where((n) => n.isNotEmpty)
-            .toSet()
-            .toList();
-        return Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Wrap(
-            spacing: 6, runSpacing: 6,
-            children: names.map((n) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: kGreen.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: kGreen.withOpacity(0.3))),
-              child: Text(n, style: const TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w600, color: kGreen)),
-            )).toList(),
-          ),
-        );
-      },
-    );
-  }
+  /// Streams vaccine names, returns (names list, hasRecords bool)
+  Stream<List<String>> get _vaccineNamesStream => FirebaseFirestore.instance
+      .collection('users').doc(widget.ownerID)
+      .collection('pets').doc(widget.petID)
+      .collection('vaccinations')
+      .orderBy('date_timestamp', descending: true)
+      .snapshots()
+      .map((snap) => snap.docs
+          .map((d) => (d.data())['vaccine_name']?.toString() ?? '')
+          .where((n) => n.isNotEmpty)
+          .toSet()
+          .toList());
 
   @override
   Widget build(BuildContext context) {
     final e = widget.editMode;
-    return Column(children: [
-      ProfileCard(
-        icon: Icons.health_and_safety_outlined,
-        title: 'Health',
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          LabeledField(
-            label: 'Spayed / Neutered',
-            child: e
-              ? ToggleRow(
-                  options: const ['Yes', 'No'],
-                  selected: _sterilization ? 'Yes' : 'No',
-                  onChanged: (v) {
-                    setState(() => _sterilization = v == 'Yes');
-                    _emit();
-                  })
-              : StatusBadge(
-                  label: widget.sterilization ? 'Yes' : 'No',
-                  positive: widget.sterilization)),
-          LabeledField(
-            label: 'Vaccinated',
-            child: e
-              ? ToggleRow(
-                  options: const ['Yes', 'No'],
-                  selected: _vaccinated ? 'Yes' : 'No',
-                  onChanged: (v) {
-                    setState(() => _vaccinated = v == 'Yes');
-                    _emit();
-                  })
-              : StatusBadge(
-                  label: widget.vaccinated ? 'Yes' : 'No',
-                  positive: widget.vaccinated)),
-          // Vaccine details: edit mode = text field, view mode + vaccinated = live record chips
-          if (_vaccinated || widget.vaccinated || e)
-            LabeledField(
-              label: 'Vaccines',
+
+    return StreamBuilder<List<String>>(
+      stream: _vaccineNamesStream,
+      builder: (context, snap) {
+        final vaccineNames  = snap.data ?? [];
+        final hasVaxRecords = vaccineNames.isNotEmpty;
+
+        // If there are vaccine records, vaccinated = true always.
+        // Emit this upstream so Firestore stays in sync when saving.
+        final effectiveVaccinated = hasVaxRecords || widget.vaccinated;
+
+        return Column(children: [
+          ProfileCard(
+            icon: Icons.health_and_safety_outlined,
+            title: 'Health',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+
+                // Spayed / Neutered
+                LabeledField(
+                  label: 'Spayed / Neutered',
+                  child: e
+                    ? ToggleRow(
+                        options: const ['Yes', 'No'],
+                        selected: _sterilization ? 'Yes' : 'No',
+                        onChanged: (v) {
+                          setState(() => _sterilization = v == 'Yes');
+                          _emit(vaccinated: effectiveVaccinated);
+                        })
+                    : StatusBadge(
+                        label: widget.sterilization ? 'Yes' : 'No',
+                        positive: widget.sterilization)),
+
+                // Vaccinated — driven by records, not editable
+                LabeledField(
+                  label: 'Vaccinated',
+                  child: StatusBadge(
+                    label: effectiveVaccinated ? 'Yes' : 'No',
+                    positive: effectiveVaccinated,
+                  ),
+                ),
+
+                // Vaccines — always read-only, shown only if records exist
+                if (effectiveVaccinated)
+                  LabeledField(
+                    label: 'Vaccines',
+                    child: snap.connectionState == ConnectionState.waiting
+                      ? const SizedBox(
+                          height: 16,
+                          child: LinearProgressIndicator(color: kNavy))
+                      : hasVaxRecords
+                        // Show comma-separated names from records
+                        ? Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              vaccineNames.join(', '),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF2C2C2C),
+                                fontWeight: FontWeight.w500,
+                                height: 1.4,
+                              ),
+                            ),
+                          )
+                        // Fallback to stored text if no records but vaccinated=true
+                        : ValueText(widget.vaccineDetails.isEmpty
+                            ? '—' : widget.vaccineDetails),
+                  ),
+              ],
+            ),
+          ),
+
+          // Notes card
+          if (widget.description.isNotEmpty || e) ...[
+            const SizedBox(height: 14),
+            ProfileCard(
+              icon: Icons.notes_outlined,
+              title: 'Notes',
               child: e
                 ? ProfileTextField(
-                    ctrl: _vaccineDetailsCtrl,
-                    hint: 'e.g. Rabies, DHPP',
-                    onChanged: (_) => _emit())
-                : (widget.vaccinated
-                    ? _vaccineNamesFromRecords()
-                    : ValueText(widget.vaccineDetails.isEmpty
-                        ? '—' : widget.vaccineDetails))),
-        ]),
-      ),
-      if (widget.description.isNotEmpty || e) ...[
-        const SizedBox(height: 14),
-        ProfileCard(
-          icon: Icons.notes_outlined,
-          title: 'Notes',
-          child: e
-            ? ProfileTextField(
-                ctrl: _descCtrl, maxLines: 4,
-                hint: 'Add notes about your pet...',
-                onChanged: (_) => _emit())
-            : Text(widget.description,
-                style: const TextStyle(
-                    fontSize: 13, color: Color(0xFF4A4A4A), height: 1.5)),
-        ),
-      ],
-    ]);
+                    ctrl: _descCtrl, maxLines: 4,
+                    hint: 'Add notes about your pet...',
+                    onChanged: (_) => _emit(vaccinated: effectiveVaccinated))
+                : Text(widget.description,
+                    style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF4A4A4A),
+                        height: 1.5)),
+            ),
+          ],
+        ]);
+      },
+    );
   }
 }

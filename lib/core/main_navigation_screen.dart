@@ -5,7 +5,7 @@ import '../../services/notification_services.dart'; // Ensure this is imported
 
 // Feature imports
 import '../../features/home/screens/home_page.dart';
-import '../../features/auth/screens/account_screen.dart';
+import '../features/auth/screens/account_screen.dart';
 import '../../features/pets/screens/mypets_screen.dart';
 import '../../features/records/screen/records_screen.dart';
 import 'custom_nav_bar.dart';

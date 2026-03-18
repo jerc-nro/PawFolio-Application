@@ -17,7 +17,7 @@ class RecordsPalette {
   static const Color terra      = Color(0xFFBA7F57); // accent – terracotta
  
   // ── Derived ────────────────────────────────────────────────────────────────
-  static const Color bg         = Color(0xFFF2EDE8); // linen lightened ~8 %
+  static const Color bg         = Color(0xFFF5F2EE);// linen lightened ~8 %
   static const Color ink        = Color(0xFF2D3D4A); // steel darkened for text
   static const Color muted      = Color(0xFF91967E); // = sage, used for subtitles
   static const Color steelLite  = Color(0xFFD8E2EB); // steel at ~15 % opacity on white

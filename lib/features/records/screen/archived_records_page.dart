@@ -34,7 +34,7 @@ class ArchivePageConfig {
   final String? subtitleKey;
   final String? statusKey;
   final List<ArchiveFieldConfig> fields;
-  final EditDialogConfig editConfig;  // linked edit config
+  final EditDialogConfig? editConfig; // nullable — weight uses inline edit
 
   const ArchivePageConfig({
     required this.pageTitle,
@@ -44,7 +44,7 @@ class ArchivePageConfig {
     this.subtitleKey,
     this.statusKey,
     required this.fields,
-    required this.editConfig,
+    this.editConfig,
   });
 }
 
@@ -129,6 +129,42 @@ const preventativeArchiveConfig = ArchivePageConfig(
   ],
 );
 
+/// Weight archive — no editConfig needed (weight uses its own edit dialog).
+const weightArchiveConfig = ArchivePageConfig(
+  pageTitle: 'WEIGHT',
+  collection: 'weight_history',
+  primaryKey: 'weight',
+  primaryFallback: 'Weight Entry',
+  // No statusKey — weight entries have no status
+  fields: [
+    ArchiveFieldConfig(
+      label: 'DATE',
+      firestoreKey: 'date_string',
+      icon: Icons.calendar_today,
+      fallback: 'N/A',
+    ),
+    ArchiveFieldConfig(
+      label: 'WEIGHT',
+      firestoreKey: 'weight',
+      icon: Icons.monitor_weight_outlined,
+      fallback: 'N/A',
+      suffix: 'kg',
+    ),
+    ArchiveFieldConfig(
+      label: 'UNIT',
+      firestoreKey: 'unit',
+      icon: Icons.straighten_outlined,
+      fallback: 'kg',
+    ),
+    ArchiveFieldConfig(
+      label: 'NOTES',
+      firestoreKey: 'notes',
+      icon: Icons.notes_outlined,
+      fallback: 'None',
+    ),
+  ],
+);
+
 // ─── PAGE ─────────────────────────────────────────────────────────────────────
 
 class ArchivedRecordsPage extends ConsumerWidget {
@@ -181,32 +217,45 @@ class ArchivedRecordsPage extends ConsumerWidget {
   // ── LOGIC ──────────────────────────────────────────────────────────────────
 
   void _handleEdit(BuildContext context, Map<String, dynamic> data, String docId) {
+    // Weight entries use their own edit dialog; other categories use editConfig
+    if (config.collection == 'weight_history') {
+      // Weight archive entries are read-only in the archive
+      // (editing is done from WeightHistoryView before archiving)
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Restore the entry to edit it.')),
+      );
+      return;
+    }
+    if (config.editConfig == null) return;
     showEditRecordDialog(
       context,
       uid: uid,
       petId: pet.petID,
       docId: docId,
-      config: config.editConfig,
+      config: config.editConfig!,
       existingData: data,
     );
   }
 
-  void _handleRestore(BuildContext context, WidgetRef ref, String docId) async {
+  Future<void> _handleRestore(
+      BuildContext context, WidgetRef ref, String docId) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Restore Record", style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text("Move this record back to the active list?"),
+        title: const Text('Restore Record',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text('Move this record back to the active list?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text("CANCEL", style: TextStyle(color: Colors.grey)),
+            child: const Text('CANCEL', style: TextStyle(color: Colors.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text("RESTORE",
-                style: TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.bold)),
+            child: const Text('RESTORE',
+                style: TextStyle(
+                    color: Color(0xFF2E7D32), fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -221,43 +270,54 @@ class ArchivedRecordsPage extends ConsumerWidget {
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Record restored to active list")),
+          const SnackBar(content: Text('Record restored to active list')),
         );
       }
     }
   }
 
-  void _handleDelete(BuildContext context, WidgetRef ref, String docId) async {
+  Future<void> _handleDelete(
+      BuildContext context, WidgetRef ref, String docId) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Permanently Delete", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Permanently Delete',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         content: const Text(
-            "This will permanently delete the record and cannot be undone. Are you sure?"),
+            'This will permanently delete the record and cannot be undone. Are you sure?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text("CANCEL", style: TextStyle(color: Colors.grey)),
+            child: const Text('CANCEL', style: TextStyle(color: Colors.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text("DELETE FOREVER",
-                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            child: const Text('DELETE FOREVER',
+                style: TextStyle(
+                    color: Colors.red, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     ) ?? false;
 
     if (confirm) {
-      await ref.read(recordControllerProvider.notifier).deleteRecord(
-        petId: pet.petID,
-        collection: config.collection,
-        recordId: docId,
-      );
+      if (config.collection == 'weight_history') {
+        // Use weight-specific delete so the pet doc weight is restored
+        await ref.read(recordControllerProvider.notifier).deleteWeightRecord(
+          petId: pet.petID,
+          recordId: docId,
+        );
+      } else {
+        await ref.read(recordControllerProvider.notifier).deleteRecord(
+          petId: pet.petID,
+          collection: config.collection,
+          recordId: docId,
+        );
+      }
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Record permanently deleted")),
+          const SnackBar(content: Text('Record permanently deleted')),
         );
       }
     }
@@ -275,10 +335,12 @@ class ArchivedRecordsPage extends ConsumerWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: query.snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasError)
-          return const Center(child: Text("Error loading archived records."));
-        if (snapshot.connectionState == ConnectionState.waiting)
+        if (snapshot.hasError) {
+          return const Center(child: Text('Error loading archived records.'));
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
+        }
 
         final docs = snapshot.data?.docs ?? [];
         if (docs.isEmpty) return _buildEmptyState();
@@ -306,11 +368,20 @@ class ArchivedRecordsPage extends ConsumerWidget {
     final extra  = data['extra'] as Map<String, dynamic>? ?? {};
     final merged = {...data, ...extra};
 
-    final title    = (merged[config.primaryKey] ?? config.primaryFallback).toString();
+    // Weight: show "X kg" as the title
+    final String title;
+    if (config.collection == 'weight_history') {
+      final w = (merged['weight'] as num?)?.toDouble();
+      final u = merged['unit'] ?? 'kg';
+      title = w != null ? '$w $u' : config.primaryFallback;
+    } else {
+      title = (merged[config.primaryKey] ?? config.primaryFallback).toString();
+    }
+
     final subtitle = config.subtitleKey != null
         ? (merged[config.subtitleKey!] ?? '').toString().toUpperCase()
         : '';
-    final status   = config.statusKey != null
+    final status = config.statusKey != null
         ? (merged[config.statusKey!] ?? '').toString().toUpperCase()
         : '';
 
@@ -333,49 +404,60 @@ class ArchivedRecordsPage extends ConsumerWidget {
           BoxShadow(
               color: Colors.black.withOpacity(0.04),
               blurRadius: 8,
-              offset: const Offset(0, 2))
+              offset: const Offset(0, 2)),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header row ──────────────────────────────────────────────────
+          // ── Header row ────────────────────────────────────────────────
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(title,
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Colors.blueGrey[400])),
-                  if (subtitle.isNotEmpty)
-                    Text(subtitle,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
                         style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.blueGrey[300],
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5)),
-                ]),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: Colors.blueGrey[400])),
+                    if (subtitle.isNotEmpty)
+                      Text(subtitle,
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.blueGrey[300],
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5)),
+                  ],
+                ),
               ),
               Row(
                 children: [
                   _archivedBadge(),
                   const SizedBox(width: 2),
-                  // Edit
+                  // Edit — disabled for weight (restore first)
                   IconButton(
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero,
-                    tooltip: "Edit",
-                    icon: const Icon(Icons.edit_outlined, color: navBlue, size: 20),
+                    tooltip: config.collection == 'weight_history'
+                        ? 'Restore to edit'
+                        : 'Edit',
+                    icon: Icon(
+                      Icons.edit_outlined,
+                      color: config.collection == 'weight_history'
+                          ? Colors.grey.shade400
+                          : navBlue,
+                      size: 20,
+                    ),
                     onPressed: () => _handleEdit(context, data, docId),
                   ),
                   // Restore
                   IconButton(
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero,
-                    tooltip: "Restore to active",
+                    tooltip: 'Restore to active',
                     icon: const Icon(Icons.unarchive_outlined,
                         color: Color(0xFF2E7D32), size: 20),
                     onPressed: () => _handleRestore(context, ref, docId),
@@ -384,7 +466,7 @@ class ArchivedRecordsPage extends ConsumerWidget {
                   IconButton(
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero,
-                    tooltip: "Delete permanently",
+                    tooltip: 'Delete permanently',
                     icon: const Icon(Icons.delete_forever_outlined,
                         color: Colors.redAccent, size: 20),
                     onPressed: () => _handleDelete(context, ref, docId),
@@ -398,7 +480,7 @@ class ArchivedRecordsPage extends ConsumerWidget {
               padding: EdgeInsets.symmetric(vertical: 10),
               child: Divider(height: 1, thickness: 0.5)),
 
-          // ── Dynamic fields in rows of 2 ────────────────────────────────
+          // ── Dynamic fields in rows of 2 ───────────────────────────────
           ...List.generate((config.fields.length / 2).ceil(), (rowIndex) {
             final left  = config.fields[rowIndex * 2];
             final right = (rowIndex * 2 + 1 < config.fields.length)
@@ -407,20 +489,23 @@ class ArchivedRecordsPage extends ConsumerWidget {
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: Row(children: [
-                Expanded(child: _infoTile(left.label, resolveValue(left), icon: left.icon)),
+                Expanded(
+                    child: _infoTile(left.label, resolveValue(left),
+                        icon: left.icon)),
                 if (right != null)
                   Expanded(
-                      child: _infoTile(right.label, resolveValue(right), icon: right.icon)),
+                      child: _infoTile(right.label, resolveValue(right),
+                          icon: right.icon)),
               ]),
             );
           }),
 
-          // ── Previous status note ───────────────────────────────────────
+          // ── Previous status note ──────────────────────────────────────
           if (status.isNotEmpty)
             Row(children: [
               Icon(Icons.info_outline, size: 13, color: Colors.blueGrey[300]),
               const SizedBox(width: 6),
-              Text("Was $status before archiving",
+              Text('Was $status before archiving',
                   style: TextStyle(
                       fontSize: 10,
                       color: Colors.blueGrey[300],
@@ -440,7 +525,7 @@ class ArchivedRecordsPage extends ConsumerWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text("ARCHIVED",
+            const Text('ARCHIVED',
                 style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w900,
@@ -472,9 +557,11 @@ class ArchivedRecordsPage extends ConsumerWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            "Edit, restore, or permanently delete archived records.",
+            'Edit, restore, or permanently delete archived records.',
             style: TextStyle(
-                fontSize: 11, color: archivedGrey, fontWeight: FontWeight.w500),
+                fontSize: 11,
+                color: archivedGrey,
+                fontWeight: FontWeight.w500),
           ),
         ),
       ]),
@@ -486,13 +573,13 @@ class ArchivedRecordsPage extends ConsumerWidget {
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.inventory_2_outlined, size: 56, color: Colors.blueGrey[200]),
         const SizedBox(height: 12),
-        Text("No archived ${config.pageTitle.toLowerCase()}",
+        Text('No archived ${config.pageTitle.toLowerCase()}',
             style: TextStyle(
                 color: Colors.blueGrey[300],
                 fontWeight: FontWeight.w600,
                 fontSize: 14)),
         const SizedBox(height: 4),
-        Text("Records you archive will appear here.",
+        Text('Records you archive will appear here.',
             style: TextStyle(color: Colors.blueGrey[200], fontSize: 12)),
       ]),
     );
@@ -505,9 +592,11 @@ class ArchivedRecordsPage extends ConsumerWidget {
           color: archivedGrey.withOpacity(0.1),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: archivedGrey, width: 1)),
-      child: const Text("ARCHIVED",
+      child: const Text('ARCHIVED',
           style: TextStyle(
-              color: archivedGrey, fontSize: 9, fontWeight: FontWeight.bold)),
+              color: archivedGrey,
+              fontSize: 9,
+              fontWeight: FontWeight.bold)),
     );
   }
 

@@ -47,6 +47,8 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   timezone: ^0.10.1
   permission_handler: ^12.0.1
+  fl_chart: ^0.70.0
+  google_generative_ai: ^0.4.6
 
 dev_dependencies:
   flutter_test:
@@ -105,4 +107,4 @@ flutter_launcher_icons:
   ios: true
   image_path: "assets/images/pawfolio-logo.png" # Path to your high-res image
   adaptive_icon_background: "#ffffff" # Required for newer Android versions
-  adaptive_icon_foreground: "assets/images/pawfolio-logo.png"
+  adaptive_icon_foreground: "assets/images/pawfolio_logo.png"

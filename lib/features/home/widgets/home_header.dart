@@ -5,45 +5,72 @@ class HomeHeader extends StatelessWidget {
   final int totalPets;
   const HomeHeader({super.key, required this.username, required this.totalPets});
 
+  String get _greeting {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('GOOD MORNING',
-                    style: TextStyle(fontSize: 11, color: Color(0xFF8B947E),
-                        fontWeight: FontWeight.w600, letterSpacing: 1.2)),
+                Text(_greeting,
+                    style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF8A7060),
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 0.3)),
                 const SizedBox(height: 2),
-                Text('Hi, $username!',
-                    style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800,
+                Text('Hi, $username 👋',
+                    style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
                         color: Color(0xFF2D3A4A))),
                 const SizedBox(height: 4),
-                Row(children: [
-                  const Text('🐾 ', style: TextStyle(fontSize: 13)),
-                  Text('$totalPets pets registered',
-                      style: const TextStyle(fontSize: 13, color: Color(0xFF7A6E65))),
-                ]),
+                Text(
+                  totalPets == 0
+                      ? 'No pets yet — add one!'
+                      : '$totalPets ${totalPets == 1 ? 'pet' : 'pets'} registered',
+                  style: const TextStyle(
+                      fontSize: 13, color: Color(0xFF8A7060)),
+                ),
               ],
             ),
           ),
+          // Minimal pet count badge
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: const Color(0xFF2D3A4A),
-              borderRadius: BorderRadius.circular(12),
+              color: const Color(0xFF45617D),
+              borderRadius: BorderRadius.circular(14),
             ),
-            child: Column(children: [
-              const Text('TOTAL', style: TextStyle(fontSize: 9, color: Colors.white60,
-                  fontWeight: FontWeight.w600, letterSpacing: 1)),
-              Text('$totalPets', style: const TextStyle(fontSize: 22,
-                  fontWeight: FontWeight.w800, color: Colors.white)),
-            ]),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('$totalPets',
+                    style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        height: 1)),
+                const SizedBox(height: 2),
+                const Text('PETS',
+                    style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.white60,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1)),
+              ],
+            ),
           ),
         ],
       ),

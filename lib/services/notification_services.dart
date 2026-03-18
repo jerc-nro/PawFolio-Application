@@ -1,54 +1,63 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
-import 'package:flutter/foundation.dart' show kIsWeb; // Added for Web safety
+import 'package:flutter/foundation.dart' show kIsWeb;
+import '../models/pet_model.dart';
+import '../models/record_model.dart';
 
 class NotificationService {
   static final _notifications = FlutterLocalNotificationsPlugin();
 
-  static Future init() async {
-    if (kIsWeb) return; // ✅ Prevents crash on Web
+  static const _channelId   = 'pet_reminders';
+  static const _channelName = 'Pet Reminders';
+  static const _icon        = 'pawfolio_logo';
+
+  // ─── Init ─────────────────────────────────────────────────────────────────
+  static Future<void> init() async {
+    if (kIsWeb) return;
 
     tz.initializeTimeZones();
-    
-    // Change this to 'pawfolio' to match your drawable file!
-    const androidInit = AndroidInitializationSettings('pawfolio_logo'); 
-    
+
     await _notifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(const AndroidNotificationChannel(
-          'pet_reminders', 
-          'Pet App Reminders',
-          description: 'Notifications for birthdays, meds, and events',
+          _channelId,
+          _channelName,
+          description: 'Reminders for pet birthdays, medications, vet visits, and more.',
           importance: Importance.max,
         ));
 
     await _notifications.initialize(
-      const InitializationSettings(android: androidInit),
+      const InitializationSettings(
+        android: AndroidInitializationSettings(_icon),
+      ),
     );
   }
 
+  // ─── Permission check ─────────────────────────────────────────────────────
   static Future<bool> isAllowed() async {
     if (kIsWeb) return false;
-    final bool? granted = await _notifications
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+    final granted = await _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
         ?.areNotificationsEnabled();
     return granted ?? false;
   }
 
-  // ✅ Keeps your APK safe while allowing Web debugging
-  static Future cancelAll() async {
-    if (kIsWeb) return; 
+  // ─── Cancel ───────────────────────────────────────────────────────────────
+  static Future<void> cancelAll() async {
+    if (kIsWeb) return;
     await _notifications.cancelAll();
   }
 
-  // ✅ Used when a specific record or pet is deleted
-  static Future cancel(int id) async {
+  static Future<void> cancel(int id) async {
     if (kIsWeb) return;
     await _notifications.cancel(id);
   }
 
-  static Future schedule({
+  // ─── Low-level scheduler ──────────────────────────────────────────────────
+  static Future<void> _schedule({
     required int id,
     required String title,
     required String body,
@@ -58,11 +67,22 @@ class NotificationService {
     if (kIsWeb) return;
 
     var scheduleTime = tz.TZDateTime.from(scheduledDate, tz.local);
-    if (scheduleTime.isBefore(tz.TZDateTime.now(tz.local))) {
+    final now = tz.TZDateTime.now(tz.local);
+
+    if (scheduleTime.isBefore(now)) {
       if (matchComponents == DateTimeComponents.dateAndTime) {
-        scheduleTime = scheduleTime.add(const Duration(days: 365));
+        // Annual repeat — push to next year
+        scheduleTime = tz.TZDateTime(
+          tz.local,
+          scheduleTime.year + 1,
+          scheduleTime.month,
+          scheduleTime.day,
+          scheduleTime.hour,
+          scheduleTime.minute,
+        );
       } else {
-        return; 
+        // One-time notification already passed — skip
+        return;
       }
     }
 
@@ -73,11 +93,11 @@ class NotificationService {
       scheduleTime,
       const NotificationDetails(
         android: AndroidNotificationDetails(
-          'pet_reminders', 
-          'Pet App Reminders',
+          _channelId,
+          _channelName,
           importance: Importance.max,
           priority: Priority.high,
-          icon: 'pawfolio_logo', // ✅ Use your custom drawable icon here
+          icon: _icon,
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
@@ -87,31 +107,119 @@ class NotificationService {
     );
   }
 
-  // ========== TO BE DELETED WHEN TESTING IS DONE ==========
+  // ─────────────────────────────────────────────────────────────────────────
+  // PUBLIC: Schedule from a PetRecord
+  // ─────────────────────────────────────────────────────────────────────────
+  static Future<void> scheduleForRecord(PetRecord record) async {
+    if (kIsWeb) return;
+    final reminder = record.reminderDate;
+    if (reminder == null) return;
 
-static Future<void> showTestNotification() async {
-  if (kIsWeb) return;
+    final _Msg msg = _buildMessage(record);
 
-  await _notifications.zonedSchedule(
-    999,
-    "Test Notification! 🐾",
-    "If you see this, your icon and channel are working perfectly.",
-    tz.TZDateTime.now(tz.local).add(const Duration(seconds: 5)),
-    const NotificationDetails(
-      android: AndroidNotificationDetails(
-        'pet_reminders',
-        'Pet App Reminders',
-        importance: Importance.max,
-        priority: Priority.high,
-        icon: 'pawfolio_logo', 
-      ),
-    ),
-    // ❌ Change this:
-    // androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-    // ✅ To this:
-    androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle, 
-    uiLocalNotificationDateInterpretation:
-        UILocalNotificationDateInterpretation.absoluteTime,
-  );
+    await _schedule(
+      id:            record.notificationId,
+      title:         msg.title,
+      body:          msg.body,
+      scheduledDate: reminder,
+    );
+
+    // For medications: also notify on the last day of the course
+    final endDate = record.medicationEndDate;
+    if (endDate != null) {
+      final endReminder = DateTime(
+          endDate.year, endDate.month, endDate.day, 9, 0);
+      await _schedule(
+        id:            record.notificationId + 1,
+        title:         '💊 Last dose today — ${record.petName}',
+        body:          "Today is the final day of ${record.title} for ${record.petName}. Make sure they get their last dose!",
+        scheduledDate: endReminder,
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PUBLIC: Schedule annual birthday reminder
+  // ─────────────────────────────────────────────────────────────────────────
+  static Future<void> scheduleBirthday(Pet pet) async {
+    if (kIsWeb) return;
+    final dob = pet.birthDateTime;
+    if (dob == null) return;
+
+    // Fire at 8:00 AM every year on the pet's birthday
+    final birthdayThisYear = DateTime(
+      DateTime.now().year, dob.month, dob.day, 8, 0,
+    );
+
+    await _schedule(
+      id:              pet.birthdayNotifyId,
+      title:           '🎂 Happy Birthday, ${pet.name}!',
+      body:            "Today is ${pet.name}'s special day! Give them extra love and maybe a treat. 🐾",
+      scheduledDate:   birthdayThisYear,
+      matchComponents: DateTimeComponents.dateAndTime,
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PUBLIC: Cancel all notifications tied to a record
+  // ─────────────────────────────────────────────────────────────────────────
+  static Future<void> cancelForRecord(PetRecord record) async {
+    await cancel(record.notificationId);
+    // Also cancel the medication end-of-course notification if present
+    if (record.category == 'Medication') {
+      await cancel(record.notificationId + 1);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PRIVATE: Build title + body per category
+  // ─────────────────────────────────────────────────────────────────────────
+  static _Msg _buildMessage(PetRecord r) {
+    final name  = r.petName;
+    final title = r.title;
+
+    switch (r.category) {
+      case 'Medication':
+        return _Msg(
+          title: '💊 Medication reminder — $name',
+          body:  "Time to give $name their $title. Don't skip a dose!",
+        );
+
+      case 'Vaccination':
+        return _Msg(
+          title: '💉 Vaccination tomorrow — $name',
+          body:  "$name's $title vaccination is scheduled for tomorrow. Make sure they're ready!",
+        );
+
+      case 'Vet Visit':
+        return _Msg(
+          title: '🏥 Vet visit tomorrow — $name',
+          body:  "${name}'s vet appointment is tomorrow. Prepare any questions and bring their records.",
+        );
+
+      case 'Grooming':
+        return _Msg(
+          title: '✂️ Grooming session tomorrow — $name',
+          body:  "$name has a grooming appointment tomorrow. Time to get pampered! 🛁",
+        );
+
+      case 'Preventative':
+        return _Msg(
+          title: '🛡️ Preventative care due — $name',
+          body:  "$name's $title is scheduled for tomorrow. Stay on top of their protection!",
+        );
+
+      default:
+        return _Msg(
+          title: '🐾 Reminder for $name',
+          body:  "You have an upcoming $title for $name.",
+        );
+    }
+  }
 }
+
+// ─── Internal message model ───────────────────────────────────────────────────
+class _Msg {
+  final String title, body;
+  const _Msg({required this.title, required this.body});
 }

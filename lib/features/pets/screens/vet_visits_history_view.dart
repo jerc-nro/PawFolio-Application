@@ -142,12 +142,10 @@ class VetVisitsHistoryView extends ConsumerWidget {
         .collection('users').doc(uid)
         .collection('pets').doc(pet.petID)
         .collection('vet_visits')
-        .where('is_archived', isEqualTo: false);
+        .orderBy('date_timestamp', descending: true);
 
     if (currentFilter != "ALL") {
       query = query.where('status', isEqualTo: currentFilter);
-    } else {
-      query = query.orderBy('date_timestamp', descending: true);
     }
 
     return StreamBuilder<QuerySnapshot>(
@@ -158,7 +156,8 @@ class VetVisitsHistoryView extends ConsumerWidget {
         if (snapshot.connectionState == ConnectionState.waiting)
           return const Center(child: CircularProgressIndicator());
 
-        final docs = snapshot.data?.docs ?? [];
+        final allDocs = snapshot.data?.docs ?? [];
+        final docs = allDocs.where((d) => (d.data() as Map<String,dynamic>)['is_archived'] != true).toList();
         if (docs.isEmpty)
           return const Center(child: Text("No records found.",
               style: TextStyle(color: Colors.grey)));
@@ -205,8 +204,8 @@ class VetVisitsHistoryView extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white, borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.blueGrey.withOpacity(0.1)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05),
+        border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.1)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -260,14 +259,14 @@ class VetVisitsHistoryView extends ConsumerWidget {
   Widget _viewArchiveButton() => Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: navBlue.withOpacity(0.08), borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: navBlue.withOpacity(0.25), width: 1),
+          color: navBlue.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: navBlue.withValues(alpha: 0.25), width: 1),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.inventory_2_outlined, size: 14, color: navBlue.withOpacity(0.7)),
+          Icon(Icons.inventory_2_outlined, size: 14, color: navBlue.withValues(alpha: 0.7)),
           const SizedBox(width: 6),
           Text("VIEW ARCHIVE", style: TextStyle(fontSize: 11,
-              fontWeight: FontWeight.bold, color: navBlue.withOpacity(0.7),
+              fontWeight: FontWeight.bold, color: navBlue.withValues(alpha: 0.7),
               letterSpacing: 0.5)),
         ]),
       );
@@ -276,7 +275,7 @@ class VetVisitsHistoryView extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (icon != null) Icon(icon, size: 15, color: navBlue.withOpacity(0.6)),
+          if (icon != null) Icon(icon, size: 15, color: navBlue.withValues(alpha: 0.6)),
           const SizedBox(width: 8),
           Flexible(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey,
@@ -322,7 +321,7 @@ class VetVisitsHistoryView extends ConsumerWidget {
 
   Widget _statusBadge(String label, Color color) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(color: color.withOpacity(0.1),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: color, width: 1)),
         child: Text(label, style: TextStyle(

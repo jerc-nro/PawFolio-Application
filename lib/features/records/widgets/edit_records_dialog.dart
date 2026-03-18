@@ -219,7 +219,9 @@ class _EditRecordDialogState extends State<_EditRecordDialog> {
 
   @override
   void dispose() {
-    for (final c in _controllers.values) c.dispose();
+    for (final c in _controllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -458,7 +460,7 @@ class _EditRecordDialogState extends State<_EditRecordDialog> {
 
   Widget _buildDropdown(EditFieldConfig field) {
     return DropdownButtonFormField<String>(
-      value: _dropdownValues[field.firestoreKey],
+      initialValue: _dropdownValues[field.firestoreKey],
       decoration: _inputDecoration(field.label, ''),
       items: field.options
           .map((o) => DropdownMenuItem(value: o, child: Text(o)))

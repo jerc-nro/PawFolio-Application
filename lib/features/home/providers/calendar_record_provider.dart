@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../models/record_model.dart';
-import '../../auth/providers/auth_provider.dart';
 import '../../pets/providers/pet_provider.dart';
 
 const _kCollections = [
@@ -57,7 +56,9 @@ final calendarRecordsProvider =
   }
 
   controller.onCancel = () {
-    for (final s in subs) s.cancel();
+    for (final s in subs) {
+      s.cancel();
+    }
     controller.close();
   };
 

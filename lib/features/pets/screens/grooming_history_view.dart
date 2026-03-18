@@ -151,18 +151,14 @@ Widget _buildGroomingStream(BuildContext context, WidgetRef ref,
         .collection('groom_visits');
 
     // 2. Build the query
-    Query query = groomingRef.where('is_archived', isEqualTo: false);
+    Query query = groomingRef
+        .orderBy('date_timestamp', descending: true);
 
     if (currentFilter != "ALL") {
       // Filter by status if "ALL" is not selected
       query = query.where('status', isEqualTo: currentFilter);
     } 
     
-    // Always order by date to see the most recent/upcoming first
-    // Note: If you haven't created a composite index in Firebase Console 
-    // for (is_archived + status + date_timestamp), the "ALL" filter 
-    // will work, but specific status filters might need an index.
-    query = query.orderBy('date_timestamp', descending: true);
 
     return StreamBuilder<QuerySnapshot>(
       stream: query.snapshots(),
@@ -176,13 +172,14 @@ Widget _buildGroomingStream(BuildContext context, WidgetRef ref,
           return const Center(child: CircularProgressIndicator(color: navBlue));
         }
 
-        final docs = snapshot.data?.docs ?? [];
+        final allDocs = snapshot.data?.docs ?? [];
+        final docs = allDocs.where((d) => (d.data() as Map<String,dynamic>)['is_archived'] != true).toList();
         if (docs.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.event_note_outlined, size: 50, color: navBlue.withOpacity(0.3)),
+                Icon(Icons.event_note_outlined, size: 50, color: navBlue.withValues(alpha: 0.3)),
                 const SizedBox(height: 10),
                 const Text("No grooming records found.",
                     style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500)),
@@ -232,7 +229,7 @@ Widget _buildGroomingStream(BuildContext context, WidgetRef ref,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white, borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -285,14 +282,14 @@ Widget _buildGroomingStream(BuildContext context, WidgetRef ref,
   Widget _viewArchiveButton() => Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: navBlue.withOpacity(0.08), borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: navBlue.withOpacity(0.25), width: 1),
+          color: navBlue.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: navBlue.withValues(alpha: 0.25), width: 1),
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.inventory_2_outlined, size: 14, color: navBlue.withOpacity(0.7)),
+          Icon(Icons.inventory_2_outlined, size: 14, color: navBlue.withValues(alpha: 0.7)),
           const SizedBox(width: 6),
           Text("VIEW ARCHIVE", style: TextStyle(fontSize: 11,
-              fontWeight: FontWeight.bold, color: navBlue.withOpacity(0.7),
+              fontWeight: FontWeight.bold, color: navBlue.withValues(alpha: 0.7),
               letterSpacing: 0.5)),
         ]),
       );
@@ -300,7 +297,7 @@ Widget _buildGroomingStream(BuildContext context, WidgetRef ref,
   Widget _infoTile(String label, String value, {IconData? icon}) => Row(
         children: [
           if (icon != null)
-            Icon(icon, size: 15, color: const Color(0xFF0277BD).withOpacity(0.6)),
+            Icon(icon, size: 15, color: const Color(0xFF0277BD).withValues(alpha: 0.6)),
           const SizedBox(width: 8),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(label, style: const TextStyle(fontSize: 9, color: Colors.grey,
@@ -345,7 +342,7 @@ Widget _buildGroomingStream(BuildContext context, WidgetRef ref,
 
   Widget _statusBadge(String label, Color color) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(color: color.withOpacity(0.1),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: color, width: 1)),
         child: Text(label, style: TextStyle(

@@ -4,75 +4,44 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../models/record_model.dart';
 import '../providers/record_provider.dart';
+import '../screen/records_navigator.dart';
+import '../theme/records_theme.dart';
 import '_status_date_logic.dart';
 
-const _ink   = Color(0xFF455A64);
-const _blue  = Color(0xFF0277BD);
-const _green = Color(0xFF388E3C);
-
-// ── UI Helpers ────────────────────────────────────────────────
-
-Widget _label(String t, {bool required = false}) => Padding(
-  padding: const EdgeInsets.only(bottom: 6),
-  child: Text(t, style: const TextStyle(color: _ink, fontWeight: FontWeight.bold, fontSize: 13)),
-);
-
-InputDecoration _deco({String? hint, bool err = false, Widget? suffix}) => InputDecoration(
-  isDense: true, hintText: hint, counterText: '',
-  hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
-  suffixIcon: suffix,
-  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: err ? Colors.red : _blue, width: 1.5)),
-  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: err ? Colors.red : _blue, width: 2)),
-);
-
-Widget _errText(String t) => Padding(
-  padding: const EdgeInsets.only(top: 3),
-  child: Text(t, style: const TextStyle(color: Colors.red, fontSize: 11)),
-);
-
-Widget _pill(String o, String cur, void Function(String) fn) {
-  final sel = cur == o;
-  return GestureDetector(
-    onTap: () => fn(o),
-    child: AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: sel ? _blue : Colors.transparent,
-        border: Border.all(color: _blue, width: 1.5),
-        borderRadius: BorderRadius.circular(20),
+void showAddVaccinationDialog(
+  BuildContext context,
+  String petId,
+  String petName,
+  String petType, {
+  void Function(String label)? onSaved,
+}) {
+  final sw = MediaQuery.of(context).size.width;
+  showDialog(
+    context: context,
+    builder: (_) => Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: sw > 500 ? 420 : sw * 0.88,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+            color: Colors.white, borderRadius: BorderRadius.circular(25)),
+        child: _VaccineContent(
+            petId: petId, petName: petName, petType: petType, onSaved: onSaved),
       ),
-      child: Text(o, style: TextStyle(color: sel ? Colors.white : _blue,
-          fontSize: 11, fontWeight: FontWeight.bold)),
     ),
   );
 }
 
-// ── Vaccination Dialog Entry ──────────────────────────────────
-
-void showAddVaccinationDialog(BuildContext context, String petId, String petName, String petType) {
-  final sw = MediaQuery.of(context).size.width;
-  showDialog(context: context, builder: (_) => Dialog(
-    backgroundColor: Colors.transparent,
-    child: Container(
-      width: sw > 500 ? 420 : sw * 0.88,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(25)),
-      child: _VaccineContent(petId: petId, petName: petName, petType: petType),
-    ),
-  ));
-}
-
 class _VaccineContent extends ConsumerStatefulWidget {
-  final String petId;
-  final String petName;
-  final String petType;
-  const _VaccineContent({required this.petId, required this.petName, required this.petType});
-  @override ConsumerState<_VaccineContent> createState() => _VS();
+  final String petId, petName, petType;
+  final void Function(String)? onSaved;
+  const _VaccineContent(
+      {required this.petId,
+      required this.petName,
+      required this.petType,
+      this.onSaved});
+  @override
+  ConsumerState<_VaccineContent> createState() => _VS();
 }
 
 class _VS extends ConsumerState<_VaccineContent> {
@@ -82,11 +51,11 @@ class _VS extends ConsumerState<_VaccineContent> {
   final _dosage = TextEditingController();
   final _time   = TextEditingController();
 
-  String _type   = 'CORE';
-  String _unit   = 'MG';
-  String _status = 'UPCOMING';
-  TimeOfDay _tod = TimeOfDay.now();
-  bool _saving   = false;
+  String    _type   = 'CORE';
+  String    _unit   = 'MG';
+  String    _status = 'UPCOMING';
+  TimeOfDay _tod    = TimeOfDay.now();
+  bool      _saving = false;
 
   String? _nameErr, _dateErr, _timeErr;
 
@@ -107,7 +76,8 @@ class _VS extends ConsumerState<_VaccineContent> {
     if (v.trim().isEmpty) return 'Date is required';
     final d = _parseDateStr(v);
     if (d == null) return 'Invalid date';
-    if (_status != 'UPCOMING' && d.isAfter(DateTime.now())) return 'Past/present date required for this status';
+    if (_status != 'UPCOMING' && d.isAfter(DateTime.now()))
+      return 'Past/present date required for this status';
     return null;
   }
 
@@ -116,40 +86,64 @@ class _VS extends ConsumerState<_VaccineContent> {
     await showCupertinoModalPopup(
       context: context,
       builder: (_) => Container(
-        height: 260, color: Colors.white,
+        height: 260,
+        color: Colors.white,
         child: Column(children: [
-          Container(color: const Color(0xFFF5F5F5),
-            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              CupertinoButton(child: const Text('Cancel', style: TextStyle(color: Colors.red)),
-                onPressed: () => Navigator.pop(context)),
-              CupertinoButton(child: const Text('Done', style: TextStyle(color: _blue, fontWeight: FontWeight.bold)),
-                onPressed: () {
-                  setState(() { _tod = picked; _time.text = _tod.format(context); _timeErr = null; });
-                  Navigator.pop(context);
-                }),
-            ])),
-          Expanded(child: CupertinoDatePicker(
-            mode: CupertinoDatePickerMode.time,
-            initialDateTime: DateTime(2024, 1, 1, _tod.hour, _tod.minute),
-            onDateTimeChanged: (dt) => picked = TimeOfDay.fromDateTime(dt),
-          )),
+          Container(
+            color: const Color(0xFFF5F5F5),
+            child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  CupertinoButton(
+                      child: const Text('Cancel',
+                          style: TextStyle(color: Colors.red)),
+                      onPressed: () => Navigator.pop(context)),
+                  CupertinoButton(
+                      child: const Text('Done',
+                          style: TextStyle(
+                              color: RecordsPalette.steel,
+                              fontWeight: FontWeight.bold)),
+                      onPressed: () {
+                        setState(() {
+                          _tod = picked;
+                          _time.text = _tod.format(context);
+                          _timeErr = null;
+                        });
+                        Navigator.pop(context);
+                      }),
+                ]),
+          ),
+          Expanded(
+            child: CupertinoDatePicker(
+              mode: CupertinoDatePickerMode.time,
+              initialDateTime:
+                  DateTime(2024, 1, 1, _tod.hour, _tod.minute),
+              onDateTimeChanged: (dt) =>
+                  picked = TimeOfDay.fromDateTime(dt),
+            ),
+          ),
         ]),
       ),
     );
   }
 
   Future<void> _save() async {
-    final timeRequired = _status == 'COMPLETED' && _time.text.trim().isEmpty;
+    final timeRequired =
+        _status == 'COMPLETED' && _time.text.trim().isEmpty;
     setState(() {
-      _nameErr = _name.text.trim().isEmpty ? 'Vaccine name is required'
-               : _name.text.trim().length > 100 ? 'Max 100 characters' : null;
+      _nameErr = _name.text.trim().isEmpty
+          ? 'Vaccine name is required'
+          : _name.text.trim().length > 100
+              ? 'Max 100 characters'
+              : null;
       _dateErr = _validateDate(_date.text);
-      _timeErr = timeRequired ? 'Time required for Completed status' : null;
+      _timeErr =
+          timeRequired ? 'Time required for Completed status' : null;
     });
-    if ([_nameErr, _dateErr, _timeErr].any((e) => e != null) || _saving) return;
+    if ([_nameErr, _dateErr, _timeErr].any((e) => e != null) || _saving)
+      return;
 
     setState(() => _saving = true);
-    final msg = ScaffoldMessenger.of(context);
     final nav = Navigator.of(context);
     try {
       final record = PetRecord(
@@ -164,9 +158,11 @@ class _VS extends ConsumerState<_VaccineContent> {
         dateTimestamp: _parseDateStr(_date.text.trim()),
         extra: {
           'vaccine_name': _name.text.trim(),
-          'type': _type,
+          'type':         _type,
           'veterinarian': _vet.text.trim(),
-          'dosage': _dosage.text.trim().isEmpty ? '' : '${_dosage.text.trim()} $_unit',
+          'dosage': _dosage.text.trim().isEmpty
+              ? ''
+              : '${_dosage.text.trim()} $_unit',
           'time': _time.text.trim(),
         },
       );
@@ -175,131 +171,261 @@ class _VS extends ConsumerState<_VaccineContent> {
 
       if (mounted) {
         nav.pop();
-        msg.showSnackBar(const SnackBar(content: Text('Vaccination saved!'), backgroundColor: _green));
+        widget.onSaved?.call('Vaccination');
       }
     } catch (e) {
-      if (mounted) msg.showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      if (mounted) showRecordToast(context, 'Error: $e', isError: true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
+  Widget _lbl(String t) => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text(t,
+            style: const TextStyle(
+                color: RecordsPalette.ink,
+                fontWeight: FontWeight.bold,
+                fontSize: 13)),
+      );
+
+  InputDecoration _deco(
+          {String? hint, bool err = false, Widget? suffix}) =>
+      InputDecoration(
+        isDense: true,
+        hintText: hint,
+        counterText: '',
+        hintStyle: TextStyle(
+            color: RecordsPalette.muted.withOpacity(0.7), fontSize: 12),
+        suffixIcon: suffix,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+                color: err ? Colors.red : RecordsPalette.linenDeep,
+                width: 1.5)),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+                color: err ? Colors.red : RecordsPalette.steel,
+                width: 2)),
+      );
+
+  Widget _errText(String t) => Padding(
+        padding: const EdgeInsets.only(top: 3),
+        child:
+            Text(t, style: const TextStyle(color: Colors.red, fontSize: 11)),
+      );
+
+  Widget _pill(String o, String cur, void Function(String) fn) {
+    final sel = cur == o;
+    return GestureDetector(
+      onTap: () => fn(o),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.only(right: 8),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: sel ? RecordsPalette.steel : Colors.transparent,
+          border:
+              Border.all(color: RecordsPalette.steel, width: 1.5),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(o,
+            style: TextStyle(
+                color:
+                    sel ? Colors.white : RecordsPalette.steel,
+                fontSize: 11,
+                fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext ctx) {
-    final _dateRelation = dateRelation(parseDMY(_date.text));
+    final daterltn = dateRelation(parseDMY(_date.text));
     return SingleChildScrollView(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-        const Row(children: [
-          Icon(Icons.vaccines_outlined, color: _ink, size: 20),
-          SizedBox(width: 8),
-          Text('Add Vaccination', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _ink)),
-        ]),
-        const SizedBox(height: 16),
+      child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                    color: const Color(0xFFEDF4EB),
+                    borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.verified_outlined,
+                    color: Color(0xFF5A9E62), size: 18),
+              ),
+              const SizedBox(width: 10),
+              const Text('Add Vaccination',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: RecordsPalette.ink)),
+            ]),
+            const SizedBox(height: 16),
 
-        _label('Vaccine Name'),
-        TextField(controller: _name, maxLength: 100, onChanged: (_) => setState(() => _nameErr = null),
-          decoration: _deco(hint: 'e.g. Rabies, DHPP', err: _nameErr != null)),
-        if (_nameErr != null) _errText(_nameErr!),
-        const SizedBox(height: 14),
+            _lbl('Vaccine Name'),
+            TextField(
+                controller: _name,
+                maxLength: 100,
+                onChanged: (_) => setState(() => _nameErr = null),
+                decoration: _deco(
+                    hint: 'e.g. Rabies, DHPP', err: _nameErr != null)),
+            if (_nameErr != null) _errText(_nameErr!),
+            const SizedBox(height: 14),
 
-        _label('Vaccine Type'),
-        Row(children: [
-          _pill('CORE', _type, (v) => setState(() => _type = v)),
-          _pill('NON-CORE', _type, (v) => setState(() => _type = v)),
-        ]),
-        const SizedBox(height: 14),
+            _lbl('Vaccine Type'),
+            Row(children: [
+              _pill('CORE', _type, (v) => setState(() => _type = v)),
+              _pill('NON-CORE', _type, (v) => setState(() => _type = v)),
+            ]),
+            const SizedBox(height: 14),
 
-        _label('Date of Vaccination'),
-        GestureDetector(
-          onTap: () async {
-            final pastOnly = _status != 'UPCOMING';
-            final d = await showDatePicker(
-              context: ctx,
-              initialDate: DateTime.now(),
-              firstDate: DateTime(2000),
-              lastDate: pastOnly ? DateTime.now() : DateTime(2101),
-              builder: (c, child) => Theme(data: Theme.of(c).copyWith(
-                colorScheme: const ColorScheme.light(primary: _ink)), child: child!),
-            );
-            if (d != null) {
-              final formatted = DateFormat('dd.MM.yyyy').format(d);
-              final rel = dateRelation(parseDMY(formatted));
-              final corrected = autoCorrectStatus(_status, rel);
-              final changed = corrected != _status;
-              setState(() {
-                _date.text = formatted;
-                _status = corrected;
-                _dateErr = null;
-              });
-              if (changed && context.mounted) {
-                final nice = corrected[0] + corrected.substring(1).toLowerCase();
-                ScaffoldMessenger.of(context)
-                  ..hideCurrentSnackBar()
-                  ..showSnackBar(SnackBar(
-                    content: Text("Status updated to '$nice' for this date.",
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-                    backgroundColor: const Color(0xFF455A64),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    duration: const Duration(seconds: 3),
-                  ));
-              }
-            }
-          },
-          child: AbsorbPointer(child: TextField(controller: _date,
-            decoration: _deco(hint: 'DD.MM.YYYY', err: _dateErr != null,
-              suffix: const Icon(Icons.calendar_month, size: 18)))),
-        ),
-        if (_dateErr != null) _errText(_dateErr!),
-        const SizedBox(height: 14),
+            _lbl('Date of Vaccination'),
+            GestureDetector(
+              onTap: () async {
+                final pastOnly = _status != 'UPCOMING';
+                final d = await showDatePicker(
+                  context: ctx,
+                  initialDate: DateTime.now(),
+                  firstDate: DateTime(2000),
+                  lastDate: pastOnly ? DateTime.now() : DateTime(2101),
+                  builder: (c, child) => Theme(
+                      data: Theme.of(c).copyWith(
+                          colorScheme: const ColorScheme.light(
+                              primary: RecordsPalette.steel)),
+                      child: child!),
+                );
+                if (d != null) {
+                  final formatted = DateFormat('dd.MM.yyyy').format(d);
+                  final rel = dateRelation(parseDMY(formatted));
+                  final corrected = autoCorrectStatus(_status, rel);
+                  final changed = corrected != _status;
+                  setState(() {
+                    _date.text = formatted;
+                    _status = corrected;
+                    _dateErr = null;
+                  });
+                  if (changed && context.mounted) {
+                    final nice = corrected[0] +
+                        corrected.substring(1).toLowerCase();
+                    showRecordToast(context,
+                        "Status updated to '$nice'",
+                        icon: Icons.info_outline_rounded);
+                  }
+                }
+              },
+              child: AbsorbPointer(
+                  child: TextField(
+                      controller: _date,
+                      decoration: _deco(
+                          hint: 'DD.MM.YYYY',
+                          err: _dateErr != null,
+                          suffix: Icon(Icons.calendar_month,
+                              size: 18,
+                              color: RecordsPalette.muted)))),
+            ),
+            if (_dateErr != null) _errText(_dateErr!),
+            const SizedBox(height: 14),
 
-        _label('Veterinarian'),
-        TextField(controller: _vet, maxLength: 100, decoration: _deco(hint: 'Dr. Name')),
-        const SizedBox(height: 14),
+            _lbl('Veterinarian'),
+            TextField(
+                controller: _vet,
+                maxLength: 100,
+                decoration: _deco(hint: 'Dr. Name')),
+            const SizedBox(height: 14),
 
-        _label('Dosage (optional)'),
-        Row(children: [
-          Expanded(child: TextField(controller: _dosage,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: _deco(hint: 'Amount'))),
-          const SizedBox(width: 10),
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            _pill('MG', _unit, (v) => setState(() => _unit = v)),
-            _pill('ML', _unit, (v) => setState(() => _unit = v)),
+            _lbl('Dosage (optional)'),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                    controller: _dosage,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: _deco(hint: 'Amount')),
+              ),
+              const SizedBox(width: 10),
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                _pill('MG', _unit, (v) => setState(() => _unit = v)),
+                _pill('ML', _unit, (v) => setState(() => _unit = v)),
+              ]),
+            ]),
+            const SizedBox(height: 14),
+
+            _lbl(
+                'Administration Time${_status == "COMPLETED" ? "" : " (optional)"}'),
+            GestureDetector(
+              onTap: _showTimePicker,
+              child: AbsorbPointer(
+                  child: TextField(
+                      controller: _time,
+                      decoration: _deco(
+                          hint: 'Tap to select',
+                          err: _timeErr != null,
+                          suffix: const Icon(Icons.access_time,
+                              color: RecordsPalette.steel)))),
+            ),
+            if (_timeErr != null) _errText(_timeErr!),
+            const SizedBox(height: 14),
+
+            _lbl('Status'),
+            Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  smartStatusBtn(
+                      label: 'Upcoming',
+                      color: const Color(0xFFBA7F57),
+                      current: _status,
+                      rel: daterltn,
+                      onSelect: (v) => setState(
+                          () { _status = v; _dateErr = null; }),
+                      context: context),
+                  smartStatusBtn(
+                      label: 'Ongoing',
+                      color: RecordsPalette.steel,
+                      current: _status,
+                      rel: daterltn,
+                      onSelect: (v) => setState(
+                          () { _status = v; _dateErr = null; }),
+                      context: context),
+                  smartStatusBtn(
+                      label: 'Completed',
+                      color: const Color(0xFF5A9E62),
+                      current: _status,
+                      rel: daterltn,
+                      onSelect: (v) => setState(
+                          () { _status = v; _dateErr = null; }),
+                      context: context),
+                ]),
+            const SizedBox(height: 24),
+
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _save,
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: RecordsPalette.steel,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12))),
+                child: _saving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2))
+                    : const Text('SAVE VACCINATION',
+                        style:
+                            TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
           ]),
-        ]),
-        const SizedBox(height: 14),
-
-        _label('Administration Time${_status == "COMPLETED" ? "" : " (optional)"}',
-            required: _status == 'COMPLETED'),
-        GestureDetector(
-          onTap: _showTimePicker,
-          child: AbsorbPointer(child: TextField(controller: _time,
-            decoration: _deco(hint: 'Tap to select', err: _timeErr != null,
-              suffix: const Icon(Icons.access_time, color: _ink)))),
-        ),
-        if (_timeErr != null) _errText(_timeErr!),
-        const SizedBox(height: 14),
-
-        _label('Status'),
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          smartStatusBtn(label: 'Upcoming',  color: const Color(0xFFFFB300), current: _status, rel: _dateRelation, onSelect: (v) => setState(() { _status = v; _dateErr = null; }), context: context),
-          smartStatusBtn(label: 'Ongoing',   color: const Color(0xFFD32F2F), current: _status, rel: _dateRelation, onSelect: (v) => setState(() { _status = v; _dateErr = null; }), context: context),
-          smartStatusBtn(label: 'Completed', color: const Color(0xFF388E3C), current: _status, rel: _dateRelation, onSelect: (v) => setState(() { _status = v; _dateErr = null; }), context: context),
-        ]),
-        const SizedBox(height: 24),
-
-        SizedBox(width: double.infinity, height: 48,
-          child: ElevatedButton(
-            onPressed: _saving ? null : _save,
-            style: ElevatedButton.styleFrom(backgroundColor: _blue, foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-            child: _saving
-              ? const SizedBox(width:20,height:20,child:CircularProgressIndicator(color:Colors.white,strokeWidth:2))
-              : const Text('SAVE VACCINATION', style: TextStyle(fontWeight: FontWeight.bold)),
-          )),
-      ]),
     );
   }
 }

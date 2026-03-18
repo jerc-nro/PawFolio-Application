@@ -1,4 +1,5 @@
 ﻿build/
+.vscode/launch.json
 .dart_tool/
 .pub-cache/
 .pub/

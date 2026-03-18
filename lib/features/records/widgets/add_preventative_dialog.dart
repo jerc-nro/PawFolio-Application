@@ -4,105 +4,77 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../models/record_model.dart';
 import '../providers/record_provider.dart';
+import '../screen/records_navigator.dart';
+import '../theme/records_theme.dart';
 import '_status_date_logic.dart';
 
-const _ink   = Color(0xFF455A64);
-const _blue  = Color(0xFF0277BD);
-const _green = Color(0xFF388E3C);
-
-// ── Shared UI Helpers ─────────────────────────────────────────
-
-Widget _lbl(String t, {bool req = false}) => Padding(
-  padding: const EdgeInsets.only(bottom: 6),
-  child: Text(t, style: const TextStyle(color: _ink, fontWeight: FontWeight.bold, fontSize: 13)),
-);
-
-InputDecoration _deco({String? hint, bool err = false, Widget? suffix}) =>
-  InputDecoration(
-    isDense: true, hintText: hint, counterText: '',
-    hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
-    suffixIcon: suffix,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: err ? Colors.red : _blue, width: 1.5)),
-    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: err ? Colors.red : _blue, width: 2)),
-  );
-
-Widget _errText(String t) => Padding(
-  padding: const EdgeInsets.only(top: 3),
-  child: Text(t, style: const TextStyle(color: Colors.red, fontSize: 11)),
-);
-
-Widget _pill(String o, String cur, void Function(String) fn) {
-  final sel = cur == o;
-  return GestureDetector(
-    onTap: () => fn(o),
-    child: AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      margin: const EdgeInsets.only(right: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: sel ? _blue : Colors.transparent,
-        border: Border.all(color: _blue, width: 1.5),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(o, style: TextStyle(color: sel ? Colors.white : _blue, fontSize: 11, fontWeight: FontWeight.bold)),
-    ),
-  );
-}
-
-// ── Preventative Dialog Entry Point ───────────────────────────
-
-void showAddPreventativeDialog(BuildContext context, String petId, String petName, String petType) {
+void showAddPreventativeDialog(
+  BuildContext context,
+  String petId,
+  String petName,
+  String petType, {
+  void Function(String label)? onSaved,
+}) {
   final sw = MediaQuery.of(context).size.width;
-  showDialog(context: context, builder: (_) => Dialog(
-    backgroundColor: Colors.transparent,
-    child: Container(
-      width: sw > 500 ? 420 : sw * 0.88,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(25)),
-      child: _PrevContent(petId: petId, petName: petName, petType: petType),
+  showDialog(
+    context: context,
+    builder: (_) => Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        width: sw > 500 ? 420 : sw * 0.88,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+            color: Colors.white, borderRadius: BorderRadius.circular(25)),
+        child: _PrevContent(
+            petId: petId, petName: petName, petType: petType, onSaved: onSaved),
+      ),
     ),
-  ));
+  );
 }
 
 class _PrevContent extends ConsumerStatefulWidget {
-  final String petId;
-  final String petName;
-  final String petType;
-  const _PrevContent({required this.petId, required this.petName, required this.petType});
-  @override ConsumerState<_PrevContent> createState() => _PS();
+  final String petId, petName, petType;
+  final void Function(String)? onSaved;
+  const _PrevContent(
+      {required this.petId,
+      required this.petName,
+      required this.petType,
+      this.onSaved});
+  @override
+  ConsumerState<_PrevContent> createState() => _PS();
 }
 
 class _PS extends ConsumerState<_PrevContent> {
-  final _brand     = TextEditingController();
-  final _date       = TextEditingController();
-  final _clinic    = TextEditingController();
-  final _vet       = TextEditingController();
-  final _dosage    = TextEditingController();
-  final _other     = TextEditingController();
-  final _time      = TextEditingController();
+  final _brand  = TextEditingController();
+  final _date   = TextEditingController();
+  final _clinic = TextEditingController();
+  final _vet    = TextEditingController();
+  final _dosage = TextEditingController();
+  final _other  = TextEditingController();
+  final _time   = TextEditingController();
 
-  static const _types = ['Flea/Tick','Heartworm','Dewormer','Multi-Parasite','Other'];
-  String _type   = 'Flea/Tick';
-  String _unit   = 'MG';
-  String _status = 'UPCOMING';
-  TimeOfDay _tod = const TimeOfDay(hour: 8, minute: 0);
-  bool _saving   = false;
+  static const _types = [
+    'Flea/Tick', 'Heartworm', 'Dewormer', 'Multi-Parasite', 'Other'
+  ];
+  String    _type   = 'Flea/Tick';
+  String    _unit   = 'MG';
+  String    _status = 'UPCOMING';
+  TimeOfDay _tod    = const TimeOfDay(hour: 8, minute: 0);
+  bool      _saving = false;
 
   String? _brandErr, _dateErr, _dosageErr;
 
   @override
   void dispose() {
-    for (final c in [_brand,_date,_clinic,_vet,_dosage,_other,_time]) c.dispose();
+    for (final c in [_brand, _date, _clinic, _vet, _dosage, _other, _time])
+      c.dispose();
     super.dispose();
   }
 
   DateTime? _parseDate(String s) {
-    try { 
-      final p = s.split('.'); 
-      return DateTime(int.parse(p[2]),int.parse(p[1]),int.parse(p[0])); 
+    try {
+      final p = s.split('.');
+      return DateTime(int.parse(p[2]), int.parse(p[1]), int.parse(p[0]));
     } catch (_) { return null; }
   }
 
@@ -110,12 +82,13 @@ class _PS extends ConsumerState<_PrevContent> {
     if (v.trim().isEmpty) return 'Date is required';
     final d = _parseDate(v);
     if (d == null) return 'Invalid date';
-    if (_status == 'COMPLETED' && d.isAfter(DateTime.now())) return 'Past/present date required for Completed';
+    if (_status == 'COMPLETED' && d.isAfter(DateTime.now()))
+      return 'Past/present date required for Completed';
     return null;
   }
 
   String? _validateDosage(String v) {
-    if (v.trim().isEmpty) return null; 
+    if (v.trim().isEmpty) return null;
     if (double.tryParse(v.trim()) == null) return 'Must be a number';
     if (double.parse(v.trim()) <= 0) return 'Must be > 0';
     return null;
@@ -126,23 +99,41 @@ class _PS extends ConsumerState<_PrevContent> {
     await showCupertinoModalPopup(
       context: context,
       builder: (_) => Container(
-        height: 260, color: Colors.white,
+        height: 260,
+        color: Colors.white,
         child: Column(children: [
-          Container(color: const Color(0xFFF5F5F5),
-            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              CupertinoButton(child: const Text('Cancel', style: TextStyle(color: Colors.red)),
-                onPressed: () => Navigator.pop(context)),
-              CupertinoButton(child: const Text('Done', style: TextStyle(color: _blue, fontWeight: FontWeight.bold)),
-                onPressed: () {
-                  setState(() { _tod = picked; _time.text = _tod.format(context); });
-                  Navigator.pop(context);
-                }),
-            ])),
-          Expanded(child: CupertinoDatePicker(
-            mode: CupertinoDatePickerMode.time,
-            initialDateTime: DateTime(2024,1,1,_tod.hour,_tod.minute),
-            onDateTimeChanged: (dt) => picked = TimeOfDay.fromDateTime(dt),
-          )),
+          Container(
+            color: const Color(0xFFF5F5F5),
+            child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  CupertinoButton(
+                      child: const Text('Cancel',
+                          style: TextStyle(color: Colors.red)),
+                      onPressed: () => Navigator.pop(context)),
+                  CupertinoButton(
+                      child: const Text('Done',
+                          style: TextStyle(
+                              color: RecordsPalette.steel,
+                              fontWeight: FontWeight.bold)),
+                      onPressed: () {
+                        setState(() {
+                          _tod = picked;
+                          _time.text = _tod.format(context);
+                        });
+                        Navigator.pop(context);
+                      }),
+                ]),
+          ),
+          Expanded(
+            child: CupertinoDatePicker(
+              mode: CupertinoDatePickerMode.time,
+              initialDateTime:
+                  DateTime(2024, 1, 1, _tod.hour, _tod.minute),
+              onDateTimeChanged: (dt) =>
+                  picked = TimeOfDay.fromDateTime(dt),
+            ),
+          ),
         ]),
       ),
     );
@@ -150,23 +141,25 @@ class _PS extends ConsumerState<_PrevContent> {
 
   Future<void> _save() async {
     if (_type == 'Other' && _other.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please specify the preventative type'), backgroundColor: Colors.red));
+      showRecordToast(context, 'Please specify the preventative type',
+          isError: true);
       return;
     }
     setState(() {
-      _brandErr  = _brand.text.trim().isEmpty ? 'Brand name is required'
-                   : _brand.text.trim().length > 100 ? 'Max 100 characters' : null;
+      _brandErr = _brand.text.trim().isEmpty
+          ? 'Brand name is required'
+          : _brand.text.trim().length > 100
+              ? 'Max 100 characters'
+              : null;
       _dateErr   = _validateDate(_date.text);
       _dosageErr = _validateDosage(_dosage.text);
     });
-    if ([_brandErr,_dateErr,_dosageErr].any((e) => e != null) || _saving) return;
+    if ([_brandErr, _dateErr, _dosageErr].any((e) => e != null) || _saving)
+      return;
 
     setState(() => _saving = true);
-    final msg = ScaffoldMessenger.of(context);
     final nav = Navigator.of(context);
     try {
-      // ── Refactored Save logic using Universal Record ──
       final record = PetRecord(
         id: '',
         petID: widget.petId,
@@ -178,163 +171,318 @@ class _PS extends ConsumerState<_PrevContent> {
         dateString: _date.text.trim(),
         dateTimestamp: _parseDate(_date.text.trim()),
         extra: {
-          'brand_name': _brand.text.trim(),
-          'type': _type == 'Other' ? _other.text.trim() : _type,
+          'brand_name':  _brand.text.trim(),
+          'type':        _type == 'Other' ? _other.text.trim() : _type,
           'clinic_name': _clinic.text.trim(),
-          'veterinarian': _vet.text.trim(),
-          'dosage': _dosage.text.trim().isEmpty ? '' : '${_dosage.text.trim()} $_unit',
+          'veterinarian':_vet.text.trim(),
+          'dosage': _dosage.text.trim().isEmpty
+              ? ''
+              : '${_dosage.text.trim()} $_unit',
           'intake_time': _time.text.trim(),
         },
       );
 
       await ref.read(recordControllerProvider.notifier).addPetRecord(record);
 
-      if (mounted) { 
-        nav.pop(); 
-        msg.showSnackBar(const SnackBar(content: Text('Preventative saved!'), backgroundColor: _green)); 
+      if (mounted) {
+        nav.pop();
+        widget.onSaved?.call('Preventative');
       }
     } catch (e) {
-      if (mounted) msg.showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      if (mounted) showRecordToast(context, 'Error: $e', isError: true);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
+  Widget _lbl(String t) => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text(t,
+            style: const TextStyle(
+                color: RecordsPalette.ink,
+                fontWeight: FontWeight.bold,
+                fontSize: 13)),
+      );
+
+  InputDecoration _deco(
+          {String? hint, bool err = false, Widget? suffix}) =>
+      InputDecoration(
+        isDense: true,
+        hintText: hint,
+        counterText: '',
+        hintStyle: TextStyle(
+            color: RecordsPalette.muted.withOpacity(0.7), fontSize: 12),
+        suffixIcon: suffix,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+                color: err ? Colors.red : RecordsPalette.linenDeep,
+                width: 1.5)),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+                color: err ? Colors.red : RecordsPalette.steel,
+                width: 2)),
+      );
+
+  Widget _errText(String t) => Padding(
+        padding: const EdgeInsets.only(top: 3),
+        child:
+            Text(t, style: const TextStyle(color: Colors.red, fontSize: 11)),
+      );
+
+  Widget _pill(String o, String cur, void Function(String) fn) {
+    final sel = cur == o;
+    return GestureDetector(
+      onTap: () => fn(o),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        margin: const EdgeInsets.only(right: 6),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: sel ? RecordsPalette.steel : Colors.transparent,
+          border:
+              Border.all(color: RecordsPalette.steel, width: 1.5),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(o,
+            style: TextStyle(
+                color:
+                    sel ? Colors.white : RecordsPalette.steel,
+                fontSize: 11,
+                fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext ctx) {
-    final _dateRelation = dateRelation(parseDMY(_date.text));
+    final daterltn = dateRelation(parseDMY(_date.text));
     return SingleChildScrollView(
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-      const Row(children: [
-        Icon(Icons.shield_outlined, color: _ink, size: 20),
-        SizedBox(width: 8),
-        Text('Add Preventative', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _ink)),
-      ]),
-      const SizedBox(height: 16),
+      child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                    color: const Color(0xFFEDF0FA),
+                    borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.shield_outlined,
+                    color: Color(0xFF5C6BAD), size: 18),
+              ),
+              const SizedBox(width: 10),
+              const Text('Add Preventative',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: RecordsPalette.ink)),
+            ]),
+            const SizedBox(height: 16),
 
-      _lbl('Brand Name'),
-      TextField(controller: _brand, maxLength: 100, onChanged: (_) => setState(() => _brandErr = null),
-        decoration: _deco(hint: 'e.g. NexGard', err: _brandErr != null)),
-      if (_brandErr != null) _errText(_brandErr!),
-      const SizedBox(height: 14),
+            _lbl('Brand Name'),
+            TextField(
+                controller: _brand,
+                maxLength: 100,
+                onChanged: (_) => setState(() => _brandErr = null),
+                decoration: _deco(
+                    hint: 'e.g. NexGard', err: _brandErr != null)),
+            if (_brandErr != null) _errText(_brandErr!),
+            const SizedBox(height: 14),
 
-      _lbl('Preventative Type'),
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), border: Border.all(color: _blue, width: 1.5)),
-        child: DropdownButtonHideUnderline(child: DropdownButton<String>(
-          value: _type, isExpanded: true,
-          items: _types.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-          onChanged: (v) => setState(() { _type = v!; }),
-        )),
-      ),
-      if (_type == 'Other') ...[
-        const SizedBox(height: 8),
-        TextField(controller: _other, maxLength: 100,
-          decoration: _deco(hint: 'Specify type (e.g. Ear Mites)')),
-      ],
-      const SizedBox(height: 14),
+            _lbl('Preventative Type'),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: RecordsPalette.linenDeep, width: 1.5)),
+              child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                value: _type,
+                isExpanded: true,
+                items: _types
+                    .map((v) => DropdownMenuItem(
+                        value: v, child: Text(v)))
+                    .toList(),
+                onChanged: (v) => setState(() => _type = v!),
+              )),
+            ),
+            if (_type == 'Other') ...[
+              const SizedBox(height: 8),
+              TextField(
+                  controller: _other,
+                  maxLength: 100,
+                  decoration:
+                      _deco(hint: 'Specify type (e.g. Ear Mites)')),
+            ],
+            const SizedBox(height: 14),
 
-      _lbl('Date of Administration'),
-      GestureDetector(
-        onTap: () async {
-          final pastOnly = _status == 'COMPLETED';
-          final d = await showDatePicker(
-            context: ctx,
-            initialDate: DateTime.now(),
-            firstDate: DateTime(2000),
-            lastDate: pastOnly ? DateTime.now() : DateTime(2101),
-            builder: (c, child) => Theme(data: Theme.of(c).copyWith(
-              colorScheme: const ColorScheme.light(primary: _ink)), child: child!),
-          );
-          if (d != null) {
-              final formatted = DateFormat('dd.MM.yyyy').format(d);
-              final rel = dateRelation(parseDMY(formatted));
-              final corrected = autoCorrectStatus(_status, rel);
-              final changed = corrected != _status;
-              setState(() {
-                _date.text = formatted;
-                _status = corrected;
-                _dateErr = null;
-              });
-              if (changed && context.mounted) {
-                final nice = corrected[0] + corrected.substring(1).toLowerCase();
-                ScaffoldMessenger.of(context)
-                  ..hideCurrentSnackBar()
-                  ..showSnackBar(SnackBar(
-                    content: Text("Status updated to '$nice' for this date.",
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-                    backgroundColor: const Color(0xFF455A64),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    duration: const Duration(seconds: 3),
-                  ));
-              }
-            }
-        },
-        child: AbsorbPointer(child: TextField(controller: _date,
-          decoration: _deco(hint: 'DD.MM.YYYY', err: _dateErr != null,
-            suffix: const Icon(Icons.calendar_month, size: 18)))),
-      ),
-      if (_dateErr != null) _errText(_dateErr!),
-      const SizedBox(height: 14),
+            _lbl('Date of Administration'),
+            GestureDetector(
+              onTap: () async {
+                final pastOnly = _status == 'COMPLETED';
+                final d = await showDatePicker(
+                  context: ctx,
+                  initialDate: DateTime.now(),
+                  firstDate: DateTime(2000),
+                  lastDate: pastOnly ? DateTime.now() : DateTime(2101),
+                  builder: (c, child) => Theme(
+                      data: Theme.of(c).copyWith(
+                          colorScheme: const ColorScheme.light(
+                              primary: RecordsPalette.steel)),
+                      child: child!),
+                );
+                if (d != null) {
+                  final formatted = DateFormat('dd.MM.yyyy').format(d);
+                  final rel = dateRelation(parseDMY(formatted));
+                  final corrected = autoCorrectStatus(_status, rel);
+                  final changed = corrected != _status;
+                  setState(() {
+                    _date.text = formatted;
+                    _status = corrected;
+                    _dateErr = null;
+                  });
+                  if (changed && context.mounted) {
+                    final nice = corrected[0] +
+                        corrected.substring(1).toLowerCase();
+                    showRecordToast(context,
+                        "Status updated to '$nice'",
+                        icon: Icons.info_outline_rounded);
+                  }
+                }
+              },
+              child: AbsorbPointer(
+                  child: TextField(
+                      controller: _date,
+                      decoration: _deco(
+                          hint: 'DD.MM.YYYY',
+                          err: _dateErr != null,
+                          suffix: Icon(Icons.calendar_month,
+                              size: 18,
+                              color: RecordsPalette.muted)))),
+            ),
+            if (_dateErr != null) _errText(_dateErr!),
+            const SizedBox(height: 14),
 
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _lbl('Clinic'),
-          TextField(controller: _clinic, maxLength: 100, decoration: _deco(hint: 'Clinic')),
-        ])),
-        const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _lbl('Vet'),
-          TextField(controller: _vet, maxLength: 100, decoration: _deco(hint: 'Dr. Smith')),
-        ])),
-      ]),
-      const SizedBox(height: 14),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _lbl('Clinic'),
+                      TextField(
+                          controller: _clinic,
+                          maxLength: 100,
+                          decoration: _deco(hint: 'Clinic')),
+                    ]),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _lbl('Vet'),
+                      TextField(
+                          controller: _vet,
+                          maxLength: 100,
+                          decoration: _deco(hint: 'Dr. Smith')),
+                    ]),
+              ),
+            ]),
+            const SizedBox(height: 14),
 
-      _lbl('Dosage (optional)'),
-      Row(children: [
-        Expanded(child: TextField(controller: _dosage,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          onChanged: (_) => setState(() => _dosageErr = null),
-          decoration: _deco(hint: 'Amount', err: _dosageErr != null))),
-        const SizedBox(width: 10),
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          _pill('MG', _unit, (v) => setState(() => _unit = v)),
-          _pill('ML', _unit, (v) => setState(() => _unit = v)),
-        ]),
-      ]),
-      if (_dosageErr != null) _errText(_dosageErr!),
-      const SizedBox(height: 14),
+            _lbl('Dosage (optional)'),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                    controller: _dosage,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (_) =>
+                        setState(() => _dosageErr = null),
+                    decoration: _deco(
+                        hint: 'Amount', err: _dosageErr != null)),
+              ),
+              const SizedBox(width: 10),
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                _pill('MG', _unit, (v) => setState(() => _unit = v)),
+                _pill('ML', _unit, (v) => setState(() => _unit = v)),
+              ]),
+            ]),
+            if (_dosageErr != null) _errText(_dosageErr!),
+            const SizedBox(height: 14),
 
-      _lbl('Intake Time (optional)'),
-      GestureDetector(
-        onTap: _showTimePicker,
-        child: AbsorbPointer(child: TextField(controller: _time,
-          decoration: _deco(hint: 'Tap to select time',
-            suffix: const Icon(Icons.access_time, color: _ink)))),
-      ),
-      const SizedBox(height: 14),
+            _lbl('Intake Time (optional)'),
+            GestureDetector(
+              onTap: _showTimePicker,
+              child: AbsorbPointer(
+                  child: TextField(
+                      controller: _time,
+                      decoration: _deco(
+                          hint: 'Tap to select time',
+                          suffix: const Icon(Icons.access_time,
+                              color: RecordsPalette.steel)))),
+            ),
+            const SizedBox(height: 14),
 
-      _lbl('Status'),
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        smartStatusBtn(label: 'Upcoming',  color: const Color(0xFFFFB300), current: _status, rel: _dateRelation, onSelect: (v) => setState(() { _status = v; _dateErr = null; }), context: context),
-        smartStatusBtn(label: 'Ongoing',   color: const Color(0xFFD32F2F), current: _status, rel: _dateRelation, onSelect: (v) => setState(() { _status = v; _dateErr = null; }), context: context),
-        smartStatusBtn(label: 'Completed', color: const Color(0xFF388E3C), current: _status, rel: _dateRelation, onSelect: (v) => setState(() { _status = v; _dateErr = null; }), context: context),
-      ]),
-      const SizedBox(height: 24),
+            _lbl('Status'),
+            Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  smartStatusBtn(
+                      label: 'Upcoming',
+                      color: const Color(0xFFBA7F57),
+                      current: _status,
+                      rel: daterltn,
+                      onSelect: (v) => setState(
+                          () { _status = v; _dateErr = null; }),
+                      context: context),
+                  smartStatusBtn(
+                      label: 'Ongoing',
+                      color: RecordsPalette.steel,
+                      current: _status,
+                      rel: daterltn,
+                      onSelect: (v) => setState(
+                          () { _status = v; _dateErr = null; }),
+                      context: context),
+                  smartStatusBtn(
+                      label: 'Completed',
+                      color: const Color(0xFF5A9E62),
+                      current: _status,
+                      rel: daterltn,
+                      onSelect: (v) => setState(
+                          () { _status = v; _dateErr = null; }),
+                      context: context),
+                ]),
+            const SizedBox(height: 24),
 
-      SizedBox(width: double.infinity, height: 48,
-        child: ElevatedButton(
-          onPressed: _saving ? null : _save,
-          style: ElevatedButton.styleFrom(backgroundColor: _blue, foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-          child: _saving
-            ? const SizedBox(width:20,height:20,child:CircularProgressIndicator(color:Colors.white,strokeWidth:2))
-            : const Text('SAVE PREVENTATIVE', style: TextStyle(fontWeight: FontWeight.bold)),
-        )),
-    ]),
-  );
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _save,
+                style: ElevatedButton.styleFrom(
+                    backgroundColor: RecordsPalette.steel,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12))),
+                child: _saving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2))
+                    : const Text('SAVE PREVENTATIVE',
+                        style:
+                            TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ]),
+    );
   }
 }

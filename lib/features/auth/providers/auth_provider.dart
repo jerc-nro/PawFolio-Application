@@ -18,6 +18,9 @@ class AuthState {
   final bool isSigningUp;
   final bool rememberMe;
   final bool isInitializing;
+  // True only on the very first login of a brand-new account.
+  // Cleared after the user has seen AddPetPage once.
+  final bool isNewUser;
 
   const AuthState({
     this.user,
@@ -27,9 +30,11 @@ class AuthState {
     this.isSigningUp = false,
     this.rememberMe = false,
     this.isInitializing = false,
+    this.isNewUser = false,
   });
 
-  factory AuthState.initial() => const AuthState(isLoading: true, isInitializing: true);
+  factory AuthState.initial() =>
+      const AuthState(isLoading: true, isInitializing: true);
 
   AuthState copyWith({
     AppUser? user,
@@ -39,6 +44,7 @@ class AuthState {
     bool? isSigningUp,
     bool? rememberMe,
     bool? isInitializing,
+    bool? isNewUser,
     bool clearUser = false,
     bool clearError = false,
   }) {
@@ -50,6 +56,7 @@ class AuthState {
       isSigningUp: isSigningUp ?? this.isSigningUp,
       rememberMe: rememberMe ?? this.rememberMe,
       isInitializing: isInitializing ?? this.isInitializing,
+      isNewUser: isNewUser ?? this.isNewUser,
     );
   }
 }
@@ -57,11 +64,9 @@ class AuthState {
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthService _authService;
   StreamSubscription? _authSubscription;
-  static const String _imgKey = 'user_profile_image';
+  static const String _imgKey      = 'user_profile_image';
   static const String _rememberKey = 'remember_device';
 
-  // Tracks whether we are in an active sign-in flow so the stream
-  // does NOT apply the "remember me" cold-start logout check.
   bool _isActivelySigningIn = false;
 
   AuthNotifier(this._authService) : super(AuthState.initial()) {
@@ -76,28 +81,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> toggleRememberMe(bool value) async {
     state = state.copyWith(rememberMe: value);
-    // Persist immediately so it survives app restarts
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_rememberKey, value);
   }
 
   Future<void> _initialize() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs        = await SharedPreferences.getInstance();
     final shouldRemember = prefs.getBool(_rememberKey) ?? false;
     state = state.copyWith(rememberMe: shouldRemember);
 
-    _authSubscription = _authService.currentFirebaseUserStream.listen((firebaseUser) async {
+    _authSubscription =
+        _authService.currentFirebaseUserStream.listen((firebaseUser) async {
       if (state.isSigningUp) return;
 
       if (firebaseUser == null) {
-        state = state.copyWith(user: null, isLoading: false, isInitializing: false, clearError: true);
+        state = state.copyWith(
+            user: null,
+            isLoading: false,
+            isInitializing: false,
+            clearError: true);
         return;
       }
 
-      // Only apply the "remember me" cold-start logout on the very first
-      // stream event (state.isLoading == true) AND when no active sign-in
-      // flow is in progress. This prevents kicking out a user who just
-      // completed Google / email sign-in.
       if (!shouldRemember && state.isLoading && !_isActivelySigningIn) {
         await signOut();
         return;
@@ -107,7 +112,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final refreshedUser = _authService.currentUser;
 
       if (refreshedUser == null) {
-        state = state.copyWith(user: null, isLoading: false, isInitializing: false);
+        state = state.copyWith(
+            user: null, isLoading: false, isInitializing: false);
         return;
       }
 
@@ -120,25 +126,34 @@ class AuthNotifier extends StateNotifier<AuthState> {
           user: null,
           isLoading: false,
           isInitializing: false,
-          error: "Please verify your email before logging in.",
+          error: 'Please verify your email before logging in.',
         );
         return;
       }
 
       try {
-        final userData = await _authService.getAppUserData(refreshedUser.uid);
+        final userData =
+            await _authService.getAppUserData(refreshedUser.uid);
         if (userData == null) {
           state = state.copyWith(
             user: null,
             isLoading: false,
             isInitializing: false,
-            error: "No account found. Please Sign Up first.",
+            error: 'No account found. Please Sign Up first.',
           );
           return;
         }
-        state = AuthState(user: userData, isLoading: false, isInitializing: false, rememberMe: shouldRemember);
+        state = AuthState(
+          user: userData,
+          isLoading: false,
+          isInitializing: false,
+          rememberMe: shouldRemember,
+          // Stream-based login is always an existing user
+          isNewUser: false,
+        );
       } catch (e) {
-        state = state.copyWith(user: null, isLoading: false, error: "Sync error: $e");
+        state = state.copyWith(
+            user: null, isLoading: false, error: 'Sync error: $e');
       }
     });
   }
@@ -151,10 +166,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_rememberKey, state.rememberMe);
     } catch (e) {
-      String msg = "Incorrect credentials. If you signed up with Google, use the Google button.";
+      String msg =
+          'Incorrect credentials. If you signed up with Google, use the Google button.';
       final err = e.toString().toLowerCase();
-      if (err.contains('too-many-requests')) msg = "Too many attempts. Try again later.";
-      state = state.copyWith(user: null, isLoading: false, error: msg);
+      if (err.contains('too-many-requests')) {
+        msg = 'Too many attempts. Try again later.';
+      } else if (err.contains('user-not-found') ||
+          err.contains('wrong-password') ||
+          err.contains('invalid-credential')) {
+        msg = 'Incorrect email or password.';
+      }
+      state = state.copyWith(
+          user: null, isLoading: false, error: msg);
     } finally {
       _isActivelySigningIn = false;
     }
@@ -164,19 +187,62 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = state.copyWith(isLoading: true, clearError: true);
     _isActivelySigningIn = true;
     try {
-      final appUser = await _authService.signInWithGoogle();
-      if (appUser == null) {
+      final result = await _authService.signInWithGoogle();
+      if (result == null) {
         state = state.copyWith(isLoading: false);
         return;
       }
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_rememberKey, state.rememberMe);
-      state = AuthState(user: appUser, isLoading: false, rememberMe: state.rememberMe);
+      state = AuthState(
+        user: result.user,
+        isLoading: false,
+        rememberMe: state.rememberMe,
+        // isNewUser comes from the service
+        isNewUser: result.isNewUser,
+      );
     } catch (e) {
-      state = state.copyWith(user: null, isLoading: false, error: e.toString());
+      state = state.copyWith(
+          user: null, isLoading: false, error: e.toString());
     } finally {
       _isActivelySigningIn = false;
     }
+  }
+
+  /// Called after a brand-new email signup. Sets isNewUser = true so the
+  /// router shows AddPetPage on first login.
+  Future<void> signUpAndMarkNew(
+      String email, String password, String name) async {
+    state = const AuthState(isLoading: true, isSigningUp: true);
+    try {
+      await _authService.signup(email, password, name);
+      await _authService.sendEmailVerification();
+      await _authService.logout();
+      // Mark this device so when they log in after verifying, we know
+      // to show AddPetPage.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_new_user', true);
+      state = const AuthState(isLoading: false, isSigningUp: false);
+    } catch (e) {
+      String msg = 'Sign up failed. Please try again.';
+      final err = e.toString();
+      if (err.contains('email-already-in-use')) {
+        msg = 'An account with this email already exists.';
+      } else if (err.contains('weak-password')) {
+        msg = 'Password is too weak. Use at least 8 characters.';
+      } else if (err.contains('invalid-email')) {
+        msg = 'Please enter a valid email address.';
+      }
+      state = AuthState(isLoading: false, isSigningUp: false, error: msg);
+      rethrow;
+    }
+  }
+
+  /// Called by the router once AddPetPage has been shown.
+  Future<void> clearNewUserFlag() async {
+    state = state.copyWith(isNewUser: false);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('is_new_user');
   }
 
   Future<void> signOut() async {
@@ -184,37 +250,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_imgKey);
       await prefs.setBool(_rememberKey, false);
+      await prefs.remove('is_new_user');
       await _authService.logout();
-      state = const AuthState(user: null, isLoading: false, rememberMe: false);
+      state = const AuthState(
+          user: null, isLoading: false, rememberMe: false);
     } catch (e) {
       state = state.copyWith(error: e.toString());
     }
   }
-
-  // --- SIGN UP ---
-  Future<void> signUp(String email, String password, String name) async {
-    state = const AuthState(isLoading: true, isSigningUp: true);
-    try {
-      await _authService.signup(email, password, name);
-      await _authService.sendEmailVerification();
-      await _authService.logout();
-      state = const AuthState(isLoading: false, isSigningUp: false);
-    } catch (e) {
-      String msg = "Sign up failed. Please try again.";
-      final err = e.toString();
-      if (err.contains('email-already-in-use')) {
-        msg = "An account with this email already exists.";
-      } else if (err.contains('weak-password')) {
-        msg = "Password is too weak. Use at least 8 characters.";
-      } else if (err.contains('invalid-email')) {
-        msg = "Please enter a valid email address.";
-      }
-      state = AuthState(isLoading: false, isSigningUp: false, error: msg);
-      rethrow;
-    }
-  }
-
-  // --- HELPERS ---
 
   Future<void> sendEmailVerification() async {
     try {
@@ -272,7 +315,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_imgKey, base64);
-      final success = await _authService.updateProfilePictureBase64(base64);
+      final success =
+          await _authService.updateProfilePictureBase64(base64);
       if (success) {
         state = state.copyWith(
           user: state.user?.copyWith(

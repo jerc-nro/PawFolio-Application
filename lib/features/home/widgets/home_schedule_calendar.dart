@@ -331,7 +331,7 @@ class _Overlay extends StatelessWidget {
         Expanded(child: ListView.separated(
           controller: sc, padding: const EdgeInsets.all(16),
           itemCount: records.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          separatorBuilder: (_, _) => const SizedBox(height: 8),
           itemBuilder: (_, i) => _Tile(records[i]),
         )),
       ]),

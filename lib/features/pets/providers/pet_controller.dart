@@ -3,11 +3,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../models/pet_model.dart';
+import '../../../services/notification_services.dart';
 import 'pet_provider.dart';
 
-// ===============================
-// LOADING STATE
-// ===============================
+// ── Loading state ─────────────────────────────────────────────────────────────
 final petLoadingProvider =
     NotifierProvider.autoDispose<PetLoadingNotifier, bool>(
   () => PetLoadingNotifier(),
@@ -19,25 +18,21 @@ class PetLoadingNotifier extends AutoDisposeNotifier<bool> {
   void set(bool value) => state = value;
 }
 
-// ===============================
-// PET CONTROLLER
-// ===============================
-final petControllerProvider = Provider.autoDispose((ref) => PetController(ref));
+// ── Pet Controller ────────────────────────────────────────────────────────────
+final petControllerProvider =
+    Provider.autoDispose((ref) => PetController(ref));
 
 class PetController {
   final Ref ref;
   PetController(this.ref);
 
-  // Read UID directly from FirebaseAuth so it's never null mid-stream
   String get _uid {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) throw Exception('User not logged in');
     return user.uid;
   }
 
-  // -----------------------
-  // SAVE NEW PET
-  // -----------------------
+  // ── Save new pet ────────────────────────────────────────────────────────────
   Future<void> saveNewPet({
     required String type,
     required List<String> selectedBreeds,
@@ -53,18 +48,13 @@ class PetController {
     XFile? photo,
   }) async {
     ref.read(petLoadingProvider.notifier).set(true);
-
     try {
       final uid = _uid;
-
-      // Encode photo to base64
       String? base64;
       if (photo != null) {
         final bytes = await photo.readAsBytes();
         base64 = base64Encode(bytes);
       }
-
-      // Combine breeds
       final breeds = [...selectedBreeds];
       if (otherBreed.isNotEmpty) breeds.add(otherBreed);
 
@@ -89,19 +79,32 @@ class PetController {
       );
 
       await ref.read(petServiceProvider).savePet(pet);
+
+      // Schedule annual birthday notification for this pet
+      await NotificationService.scheduleBirthday(pet);
     } finally {
       ref.read(petLoadingProvider.notifier).set(false);
     }
   }
 
-  // -----------------------
-  // DELETE PET
-  // -----------------------
+  // ── Delete ──────────────────────────────────────────────────────────────────
   Future<void> deletePet(String petID) async {
     ref.read(petLoadingProvider.notifier).set(true);
-
     try {
       await ref.read(petServiceProvider).deletePet(_uid, petID);
+
+      // Cancel birthday notification when pet is deleted
+      final pet = Pet(
+        petID: petID,
+        ownerID: _uid,
+        type: '', breed: '', name: '', sex: '',
+        birthDate: '', sterilization: false,
+        weight: 0, weightUnit: '', color: '',
+        description: '', vaccinated: false,
+        vaccineDetails: '', isArchived: false, isAlive: false,
+      );
+      await NotificationService.cancel(pet.birthdayNotifyId);
+
       ref.invalidate(activePetsProvider);
     } catch (e) {
       rethrow;
@@ -110,31 +113,47 @@ class PetController {
     }
   }
 
-  // -----------------------
-  // ARCHIVE / RESTORE PET
-  // -----------------------
+  // ── Archive / Restore ───────────────────────────────────────────────────────
   Future<void> setArchiveStatus(String petID, {required bool archive}) async {
     ref.read(petLoadingProvider.notifier).set(true);
-
     try {
       await ref.read(petServiceProvider).archivePet(
-        _uid,
-        petID,
-        undo: !archive,
-      );
+            _uid, petID,
+            undo: !archive,
+          );
       ref.invalidate(activePetsProvider);
     } finally {
       ref.read(petLoadingProvider.notifier).set(false);
     }
   }
 
-  // -----------------------
-  // ARCHIVE (shortcut)
-  // -----------------------
-  Future<void> archivePet(String petID) => setArchiveStatus(petID, archive: true);
+  Future<void> archivePet(String petID) =>
+      setArchiveStatus(petID, archive: true);
 
-  // -----------------------
-  // RESTORE (shortcut)
-  // -----------------------
-  Future<void> restorePet(String petID) => setArchiveStatus(petID, archive: false);
+  Future<void> restorePet(String petID) =>
+      setArchiveStatus(petID, archive: false);
+
+  // ── Mark as Deceased ────────────────────────────────────────────────────────
+  Future<void> markDeceased(String petID) async {
+    ref.read(petLoadingProvider.notifier).set(true);
+    try {
+      await ref.read(petServiceProvider).markDeceased(_uid, petID);
+
+      // Cancel birthday notification — no longer needed
+      final pet = Pet(
+        petID: petID,
+        ownerID: _uid,
+        type: '', breed: '', name: '', sex: '',
+        birthDate: '', sterilization: false,
+        weight: 0, weightUnit: '', color: '',
+        description: '', vaccinated: false,
+        vaccineDetails: '', isArchived: false, isAlive: false,
+      );
+      await NotificationService.cancel(pet.birthdayNotifyId);
+
+      ref.invalidate(activePetsProvider);
+    } finally {
+      ref.read(petLoadingProvider.notifier).set(false);
+    }
+  }
 }

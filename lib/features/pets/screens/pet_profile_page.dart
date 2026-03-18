@@ -9,6 +9,8 @@ import '../widgets/pet_info_card.dart';
 import '../widgets/pet_health_card.dart';
 import '../widgets/pet_history_tile.dart';
 import '../widgets/_pet_profile_shared.dart';
+import '../widgets/pet_ai_recommendation_card.dart';
+import '../../records/screen/records_navigator.dart';
 import 'grooming_history_view.dart';
 import 'medication_history_view.dart';
 import 'vaccination_history_view.dart';
@@ -36,13 +38,14 @@ class _PetProfilePageState extends ConsumerState<PetProfilePage> {
       backgroundColor: const Color(0xFFF5F2EE),
       body: CustomScrollView(slivers: [
 
-        // ── Header (unchanged) ────────────────────────────
+        // ── Header ────────────────────────────────────────
         PetProfileHeader(
           pet: pet,
-          editMode: state.editMode, saving: state.saving,
+          editMode: state.editMode,
+          saving: state.saving,
           onEdit:      notifier.enterEditMode,
           onCancel:    () { _pendingFields.clear(); notifier.cancelEditMode(); },
-          onSave:      () => _save(notifier),
+          onSave:      () => _confirmSave(notifier),
           onPickPhoto: notifier.pickAndSavePhoto,
         ),
 
@@ -67,19 +70,32 @@ class _PetProfilePageState extends ConsumerState<PetProfilePage> {
               vaccineDetails: pet.vaccineDetails,
               description: pet.description,
               editMode: state.editMode,
-              ownerID: pet.ownerID,   // ← for live vaccine stream
+              ownerID: pet.ownerID,
               petID: pet.petID,
               onChanged: (f) => _pendingFields.addAll(f),
             ),
 
             const SizedBox(height: 14),
 
-            // ── Status + Archive ──────────────────────────
+            if (!state.editMode && pet.isAlive && !pet.isArchived)
+              PetAiRecommendationCard(
+                petType:    pet.type,
+                breed:      pet.breed,
+                sex:        pet.sex,
+                weight:     pet.weight,
+                weightUnit: pet.weightUnit,
+                birthDate:  pet.birthDate,
+                sterilized: pet.sterilization,
+                vaccinated: pet.vaccinated,
+              ),
+
+            if (!state.editMode && pet.isAlive && !pet.isArchived)
+              const SizedBox(height: 14),
+
             _PetStatusCard(pet: pet),
 
             const SizedBox(height: 20),
 
-            // ── History ───────────────────────────────────
             const _SectionLabel('HISTORY'),
             const SizedBox(height: 10),
 
@@ -132,25 +148,106 @@ class _PetProfilePageState extends ConsumerState<PetProfilePage> {
   void _push(BuildContext context, Widget page) =>
       Navigator.push(context, MaterialPageRoute(builder: (_) => page));
 
+  // ── Save confirmation ─────────────────────────────────────────────────────
+  Future<void> _confirmSave(PetProfileNotifier notifier) async {
+    if (_pendingFields.isEmpty) {
+      notifier.cancelEditMode();
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFFF5F2EE),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 52, height: 52,
+              decoration: BoxDecoration(
+                color: kNavy.withOpacity(0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.save_outlined, color: kNavy, size: 26),
+            ),
+            const SizedBox(height: 14),
+            const Text('Save Changes?',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: kNavy)),
+            const SizedBox(height: 8),
+            Text(
+              'You have ${_pendingFields.length} unsaved '
+              'change${_pendingFields.length == 1 ? '' : 's'}. '
+              'Would you like to save them?',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  fontSize: 13, color: kLabel, height: 1.5),
+            ),
+          ],
+        ),
+        actions: [
+          Row(children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: () => Navigator.pop(ctx, false),
+                child: Container(
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEDE8E3),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text('Cancel',
+                      style: TextStyle(
+                          color: kLabel,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14)),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => Navigator.pop(ctx, true),
+                child: Container(
+                  height: 44,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: kNavy,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text('Save',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14)),
+                ),
+              ),
+            ),
+          ]),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    await _save(notifier);
+  }
+
   Future<void> _save(PetProfileNotifier notifier) async {
-    if (_pendingFields.isEmpty) { notifier.cancelEditMode(); return; }
     try {
       await notifier.saveFields(Map.from(_pendingFields));
       _pendingFields.clear();
-      if (mounted) _snack('Changes saved ✓', kGreen);
+      if (mounted) showRecordToast(context, 'Changes saved ✓');
     } catch (e) {
-      if (mounted) _snack('Save failed: $e', kRed);
+      if (mounted)
+        showRecordToast(context, 'Save failed: $e', isError: true);
     }
   }
-
-  void _snack(String msg, Color color) =>
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(msg),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-      ));
 }
 
 // ── Pet Status Card ───────────────────────────────────────────────────────────
@@ -170,13 +267,15 @@ class _PetStatusCard extends ConsumerWidget {
         border: Border.all(color: kDivider),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Status row
         Row(children: [
           const Icon(Icons.favorite_rounded, color: kRed, size: 16),
           const SizedBox(width: 7),
-          const Text('Status', style: TextStyle(
-              fontSize: 13, fontWeight: FontWeight.w700,
-              color: kNavy, letterSpacing: 0.3)),
+          const Text('Status',
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: kNavy,
+                  letterSpacing: 0.3)),
           const Spacer(),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -185,8 +284,10 @@ class _PetStatusCard extends ConsumerWidget {
                   ? kGreen.withOpacity(0.1)
                   : kRed.withOpacity(0.1),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: isAlive
-                  ? kGreen.withOpacity(0.3) : kRed.withOpacity(0.3)),
+              border: Border.all(
+                  color: isAlive
+                      ? kGreen.withOpacity(0.3)
+                      : kRed.withOpacity(0.3)),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Container(
@@ -198,27 +299,29 @@ class _PetStatusCard extends ConsumerWidget {
               const SizedBox(width: 6),
               Text(isAlive ? 'Active' : 'Deceased',
                   style: TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
                       color: isAlive ? kGreen : kRed)),
             ]),
           ),
         ]),
 
-        // Mark as deceased button — only if alive
         if (isAlive) ...[
           const SizedBox(height: 12),
           const Divider(color: kDivider, height: 1),
           const SizedBox(height: 12),
           GestureDetector(
             onTap: () => _handleMarkDeceased(context, ref),
-            child: Row(children: [
-              const Icon(Icons.heart_broken_outlined, color: kRed, size: 16),
-              const SizedBox(width: 8),
-              const Text('Mark as Deceased',
+            child: Row(children: const [
+              Icon(Icons.heart_broken_outlined, color: kRed, size: 16),
+              SizedBox(width: 8),
+              Text('Mark as Deceased',
                   style: TextStyle(
-                      color: kRed, fontWeight: FontWeight.w600, fontSize: 13)),
-              const Spacer(),
-              const Icon(Icons.chevron_right, color: kRed, size: 16),
+                      color: kRed,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13)),
+              Spacer(),
+              Icon(Icons.chevron_right, color: kRed, size: 16),
             ]),
           ),
         ],
@@ -226,8 +329,9 @@ class _PetStatusCard extends ConsumerWidget {
     );
   }
 
-  Future<void> _handleMarkDeceased(BuildContext context, WidgetRef ref) async {
-    // ── Step 1: Initial confirmation ────────────────────
+  Future<void> _handleMarkDeceased(
+      BuildContext context, WidgetRef ref) async {
+    // Step 1
     final step1 = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -250,18 +354,19 @@ class _PetStatusCard extends ConsumerWidget {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-                backgroundColor: kRed, elevation: 0,
+                backgroundColor: kRed,
+                elevation: 0,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12))),
             child: const Text('Continue',
-                style: TextStyle(color: Colors.white,
-                    fontWeight: FontWeight.w700))),
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.w700))),
         ],
       ),
     );
     if (step1 != true || !context.mounted) return;
 
-    // ── Step 2: Final warning — no restore ──────────────
+    // Step 2
     final step2 = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -284,16 +389,19 @@ class _PetStatusCard extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: kRed.withOpacity(0.2)),
               ),
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                const Icon(Icons.info_outline, color: kRed, size: 16),
-                const SizedBox(width: 8),
-                Expanded(child: Text(
-                  '${pet.name} will be permanently marked as deceased '
-                  'and cannot be restored.',
-                  style: const TextStyle(
-                      fontSize: 12, color: kRed, height: 1.5))),
-              ]),
+                    const Icon(Icons.info_outline, color: kRed, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${pet.name} will be permanently marked as deceased '
+                        'and cannot be restored.',
+                        style: const TextStyle(
+                            fontSize: 12, color: kRed, height: 1.5)),
+                    ),
+                  ]),
             ),
           ],
         ),
@@ -304,33 +412,27 @@ class _PetStatusCard extends ConsumerWidget {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-                backgroundColor: kRed, elevation: 0,
+                backgroundColor: kRed,
+                elevation: 0,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12))),
             child: const Text('Yes, mark as deceased',
-                style: TextStyle(color: Colors.white,
-                    fontWeight: FontWeight.w700))),
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.w700))),
         ],
       ),
     );
     if (step2 != true || !context.mounted) return;
 
-    // ── Execute ──────────────────────────────────────────
     try {
       await ref.read(petControllerProvider).archivePet(pet.petID);
       if (!context.mounted) return;
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('${pet.name} has been marked as deceased.'),
-        backgroundColor: kRed,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
-      ));
+      showRecordToast(context, '${pet.name} has been marked as deceased.',
+          isError: true, icon: Icons.heart_broken_outlined);
     } catch (e) {
       if (context.mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        showRecordToast(context, 'Error: $e', isError: true);
     }
   }
 }
@@ -342,12 +444,18 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(children: [
-    Container(width: 5, height: 5,
-        decoration: const BoxDecoration(color: kBrown, shape: BoxShape.circle)),
-    const SizedBox(width: 8),
-    Text(text, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-        color: kLabel, letterSpacing: 1.5)),
-    const SizedBox(width: 10),
-    Expanded(child: Container(height: 1, color: kDivider)),
-  ]);
+        Container(
+          width: 5, height: 5,
+          decoration: const BoxDecoration(
+              color: kBrown, shape: BoxShape.circle)),
+        const SizedBox(width: 8),
+        Text(text,
+            style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: kLabel,
+                letterSpacing: 1.5)),
+        const SizedBox(width: 10),
+        Expanded(child: Container(height: 1, color: kDivider)),
+      ]);
 }

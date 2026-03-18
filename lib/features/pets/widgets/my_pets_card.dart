@@ -1,15 +1,11 @@
-// lib/features/pets/widgets/my_pets_card.dart
-
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/pet_model.dart';
+import '../../records/theme/records_theme.dart';
 
-const _kNavy  = Color(0xFF45617D);
-const _kBrown = Color(0xFFBA7F57);
-const _kCream = Color(0xFFDCCDC3);
-
-class MyPetsCard extends ConsumerWidget {
+class MyPetsCard extends ConsumerStatefulWidget {
   final Pet pet;
   final VoidCallback onTap;
   final Function(Pet) onArchive;
@@ -22,45 +18,95 @@ class MyPetsCard extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MyPetsCard> createState() => _MyPetsCardState();
+}
+
+class _MyPetsCardState extends ConsumerState<MyPetsCard>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _flipCtrl;
+  late Animation<double> _flipAnim;
+  bool _isFlipped = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _flipCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
+    _flipAnim = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _flipCtrl, curve: Curves.easeInOutCubic),
+    );
+  }
+
+  @override
+  void dispose() {
+    _flipCtrl.dispose();
+    super.dispose();
+  }
+
+  void _flip() {
+    _isFlipped ? _flipCtrl.reverse() : _flipCtrl.forward();
+    setState(() => _isFlipped = !_isFlipped);
+  }
+
+  void _cancelFlip() {
+    _flipCtrl.reverse();
+    setState(() => _isFlipped = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: _kNavy,
-          borderRadius: BorderRadius.circular(22),
-          boxShadow: [
-            BoxShadow(
-              color: _kNavy.withOpacity(0.25),
-              blurRadius: 12,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              flex: 3,
-              child: _PetAvatar(pet: pet, onArchive: onArchive),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-              child: _PetInfo(pet: pet, onTap: onTap),
-            ),
-          ],
-        ),
+      onTap: _isFlipped ? null : widget.onTap,
+      onLongPress: _flip,
+      child: AnimatedBuilder(
+        animation: _flipAnim,
+        builder: (context, _) {
+          final angle    = _flipAnim.value * math.pi;
+          final showBack = _flipAnim.value > 0.5;
+
+          return Transform(
+            alignment: Alignment.center,
+            transform: Matrix4.identity()
+              ..setEntry(3, 2, 0.001)
+              ..rotateY(angle),
+            child: showBack
+                ? Transform(
+                    alignment: Alignment.center,
+                    transform: Matrix4.identity()..rotateY(math.pi),
+                    child: _CardBack(
+                      pet: widget.pet,
+                      onArchive: () {
+                        _cancelFlip();
+                        widget.onArchive(widget.pet);
+                      },
+                      onCancel: _cancelFlip,
+                    ),
+                  )
+                : _CardFront(
+                    pet: widget.pet,
+                    onTap: widget.onTap,
+                    onLongPress: _flip,
+                  ),
+          );
+        },
       ),
     );
   }
 }
 
-// ── Avatar ────────────────────────────────────────────────────────────────────
-class _PetAvatar extends StatelessWidget {
+// ─── Front Face ───────────────────────────────────────────────────────────────
+class _CardFront extends StatelessWidget {
   final Pet pet;
-  final Function(Pet) onArchive;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
-  const _PetAvatar({required this.pet, required this.onArchive});
+  const _CardFront({
+    required this.pet,
+    required this.onTap,
+    required this.onLongPress,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -68,61 +114,180 @@ class _PetAvatar extends StatelessWidget {
         pet.profileBase64 != null && pet.profileBase64!.isNotEmpty;
 
     return Container(
-      margin: const EdgeInsets.all(8),
-      width: double.infinity,
       decoration: BoxDecoration(
-        color: _kCream.withOpacity(0.25),
-        borderRadius: BorderRadius.circular(16),
+        color: RecordsPalette.steel,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: RecordsPalette.steel.withOpacity(0.28),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        fit: StackFit.expand,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Photo or placeholder
-          hasPhoto
-              ? Image.memory(
-                  base64Decode(pet.profileBase64!),
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true,
-                  errorBuilder: (_, _, _) => _Placeholder(pet.type),
-                )
-              : _Placeholder(pet.type),
 
-          // Subtle gradient overlay at bottom for legibility
-          Positioned(
-            bottom: 0, left: 0, right: 0,
+          // ── Photo ──────────────────────────────────────
+          Expanded(
+            flex: 5,
             child: Container(
-              height: 40,
+              margin: const EdgeInsets.all(7),
+              width: double.infinity,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.30),
-                    Colors.transparent,
-                  ],
-                ),
+                color: RecordsPalette.steelLite.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(14),
               ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(fit: StackFit.expand, children: [
+
+                hasPhoto
+                    ? Image.memory(
+                        base64Decode(pet.profileBase64!),
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                        errorBuilder: (_, __, ___) => _Placeholder(pet.type),
+                      )
+                    : _Placeholder(pet.type),
+
+                // Bottom scrim
+                Positioned(
+                  bottom: 0, left: 0, right: 0,
+                  child: Container(
+                    height: 56,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          RecordsPalette.ink.withOpacity(0.55),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Active pill — top left
+                Positioned(
+                  top: 8, left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: RecordsPalette.sage.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Container(
+                        width: 5, height: 5,
+                        decoration: const BoxDecoration(
+                            color: Colors.white, shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 5),
+                      const Text('Active',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.4)),
+                    ]),
+                  ),
+                ),
+
+                // Hold hint — top right
+                Positioned(
+                  top: 8, right: 8,
+                  child: Container(
+                    width: 26, height: 26,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.22),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.touch_app_outlined,
+                        color: Colors.white60, size: 13),
+                  ),
+                ),
+
+                // Pet type badge — bottom left over scrim
+                Positioned(
+                  bottom: 8, left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                          color: Colors.white.withOpacity(0.25)),
+                    ),
+                    child: Text(
+                      pet.type.toUpperCase(),
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8),
+                    ),
+                  ),
+                ),
+              ]),
             ),
           ),
 
-          // Archive button
-          Positioned(
-            top: 6, right: 6,
-            child: GestureDetector(
-              onTap: () => onArchive(pet),
-              child: Container(
-                width: 30, height: 30,
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.30),
-                  borderRadius: BorderRadius.circular(8),
+          // ── Info ───────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(11, 6, 11, 11),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  pet.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.1),
                 ),
-                child: const Icon(
-                  Icons.archive_outlined,
-                  color: Colors.white70,
-                  size: 16,
+                const SizedBox(height: 2),
+                Row(children: [
+                  Icon(Icons.cake_outlined,
+                      size: 10,
+                      color: Colors.white.withOpacity(0.45)),
+                  const SizedBox(width: 4),
+                  Text(
+                    pet.formattedAge,
+                    style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 10),
+                  ),
+                ]),
+                const SizedBox(height: 9),
+
+                GestureDetector(
+                  onTap: onTap,
+                  child: Container(
+                    width: double.infinity,
+                    height: 28,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: RecordsPalette.terra,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      'View Profile',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ],
@@ -131,6 +296,142 @@ class _PetAvatar extends StatelessWidget {
   }
 }
 
+// ─── Back Face ────────────────────────────────────────────────────────────────
+class _CardBack extends StatelessWidget {
+  final Pet pet;
+  final VoidCallback onArchive;
+  final VoidCallback onCancel;
+
+  const _CardBack({
+    required this.pet,
+    required this.onArchive,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF2E4558),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: RecordsPalette.steel.withOpacity(0.28),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+
+            // Icon ring
+            Container(
+              width: 50, height: 50,
+              decoration: BoxDecoration(
+                color: RecordsPalette.linen.withOpacity(0.1),
+                shape: BoxShape.circle,
+                border: Border.all(
+                    color: RecordsPalette.linen.withOpacity(0.18),
+                    width: 1.5),
+              ),
+              child: Icon(Icons.inventory_2_outlined,
+                  color: RecordsPalette.linen.withOpacity(0.75), size: 22),
+            ),
+            const SizedBox(height: 12),
+
+            Text(pet.name,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.1)),
+            const SizedBox(height: 5),
+
+            Text(
+              'Long-pressed by mistake?\nTap Cancel below.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: RecordsPalette.linen.withOpacity(0.4),
+                  fontSize: 10,
+                  height: 1.5),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Container(
+                  height: 1, color: Colors.white.withOpacity(0.08)),
+            ),
+
+            Text(
+              'Archive ${pet.name}?',
+              style: TextStyle(
+                  color: RecordsPalette.linen.withOpacity(0.65),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 10),
+
+            // Archive button
+            GestureDetector(
+              onTap: onArchive,
+              child: Container(
+                width: double.infinity,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: RecordsPalette.terra.withOpacity(0.88),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.archive_outlined,
+                          size: 14, color: Colors.white),
+                      SizedBox(width: 6),
+                      Text('Archive',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700)),
+                    ]),
+              ),
+            ),
+
+            const SizedBox(height: 7),
+
+            // Cancel button
+            GestureDetector(
+              onTap: onCancel,
+              child: Container(
+                width: double.infinity,
+                height: 32,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.07),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: Colors.white.withOpacity(0.12)),
+                ),
+                child: Text('Cancel',
+                    style: TextStyle(
+                        color: RecordsPalette.linen.withOpacity(0.6),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Placeholder ──────────────────────────────────────────────────────────────
 class _Placeholder extends StatelessWidget {
   final String type;
   const _Placeholder(this.type);
@@ -138,75 +439,26 @@ class _Placeholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Icon(
-        type.toLowerCase() == 'dog'
-            ? Icons.pets
-            : Icons.animation_outlined,
-        size: 38,
-        color: Colors.white.withOpacity(0.35),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            type.toLowerCase() == 'dog'
+                ? Icons.pets
+                : Icons.animation_outlined,
+            size: 34,
+            color: RecordsPalette.steelLite.withOpacity(0.5),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'No photo',
+            style: TextStyle(
+                fontSize: 9,
+                color: RecordsPalette.steelLite.withOpacity(0.4),
+                letterSpacing: 0.5),
+          ),
+        ],
       ),
-    );
-  }
-}
-
-// ── Info section ──────────────────────────────────────────────────────────────
-class _PetInfo extends StatelessWidget {
-  final Pet pet;
-  final VoidCallback onTap;
-
-  const _PetInfo({required this.pet, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          pet.name.toUpperCase(),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.4,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          '${pet.type}  ·  ${pet.breed}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.60),
-            fontSize: 10,
-          ),
-        ),
-        const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          height: 28,
-          child: ElevatedButton(
-            onPressed: onTap,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _kBrown.withOpacity(0.75),
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8)),
-              padding: EdgeInsets.zero,
-            ),
-            child: const Text(
-              'VIEW',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

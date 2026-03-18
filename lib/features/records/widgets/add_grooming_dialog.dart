@@ -3,46 +3,60 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../providers/record_provider.dart';
 import '../../../models/record_model.dart';
+import '../screen/records_navigator.dart';
 import '_status_date_logic.dart';
+import '../theme/records_theme.dart';
 
-const _ink = Color(0xFF455A64);
-const _blue = Color(0xFF0277BD);
-const _green = Color(0xFF388E3C);
-
-// Added petName and petType here to populate the record correctly
-void showAddGroomingDialog(BuildContext context, String petId, String petName, String petType) {
+void showAddGroomingDialog(
+  BuildContext context,
+  String petId,
+  String petName,
+  String petType, {
+  void Function(String label)? onSaved,
+}) {
   showDialog(
     context: context,
     builder: (_) => Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
-        width: MediaQuery.of(context).size.width > 500 ? 420 : MediaQuery.of(context).size.width * 0.88,
+        width: MediaQuery.of(context).size.width > 500
+            ? 420
+            : MediaQuery.of(context).size.width * 0.88,
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(25)),
-        child: _GroomContent(petId: petId, petName: petName, petType: petType),
+        decoration: BoxDecoration(
+            color: Colors.white, borderRadius: BorderRadius.circular(25)),
+        child: _GroomContent(
+          petId: petId,
+          petName: petName,
+          petType: petType,
+          onSaved: onSaved,
+        ),
       ),
     ),
   );
 }
 
 class _GroomContent extends ConsumerStatefulWidget {
-  final String petId;
-  final String petName;
-  final String petType;
-  const _GroomContent({required this.petId, required this.petName, required this.petType});
+  final String petId, petName, petType;
+  final void Function(String)? onSaved;
+  const _GroomContent({
+    required this.petId,
+    required this.petName,
+    required this.petType,
+    this.onSaved,
+  });
   @override
   ConsumerState<_GroomContent> createState() => _GS();
 }
 
 class _GS extends ConsumerState<_GroomContent> {
   final _clinic = TextEditingController();
-  final _date = TextEditingController();
+  final _date   = TextEditingController();
 
   static const _groomTypes = ['NAIL TRIM', 'FULL GROOM', 'BATH', 'EYE/EAR CLEAN'];
-  String _type = 'NAIL TRIM';
+  String _type   = 'NAIL TRIM';
   String _status = 'UPCOMING';
-  bool _saving = false;
-
+  bool   _saving = false;
   String? _clinicErr, _dateErr;
 
   @override
@@ -56,16 +70,15 @@ class _GS extends ConsumerState<_GroomContent> {
     try {
       final p = s.split('.');
       return DateTime(int.parse(p[2]), int.parse(p[1]), int.parse(p[0]));
-    } catch (_) {
-      return null;
-    }
+    } catch (_) { return null; }
   }
 
   String? _validateDate(String v) {
     if (v.trim().isEmpty) return 'Date is required';
     final d = _parseDate(v);
     if (d == null) return 'Invalid date';
-    if (_status == 'COMPLETED' && d.isAfter(DateTime.now())) return 'Past/present date required for Completed';
+    if (_status == 'COMPLETED' && d.isAfter(DateTime.now()))
+      return 'Past/present date required for Completed';
     return null;
   }
 
@@ -81,18 +94,15 @@ class _GS extends ConsumerState<_GroomContent> {
     if ([_clinicErr, _dateErr].any((e) => e != null) || _saving) return;
 
     setState(() => _saving = true);
-    final msg = ScaffoldMessenger.of(context);
     final nav = Navigator.of(context);
-
     try {
-      // 1. Create the Universal Record model
       final record = PetRecord(
-        id: '', // Firestore auto-generates this
+        id: '',
         petID: widget.petId,
         petName: widget.petName,
         petType: widget.petType,
         category: 'Grooming',
-        collection: 'groom_visits', // Matches your sub-collection name
+        collection: 'groom_visits',
         status: _status,
         dateString: _date.text.trim(),
         dateTimestamp: _parseDate(_date.text.trim()),
@@ -102,188 +112,219 @@ class _GS extends ConsumerState<_GroomContent> {
         },
       );
 
-      // 2. Call the refactored controller
       await ref.read(recordControllerProvider.notifier).addPetRecord(record);
 
       if (mounted) {
         nav.pop();
-        msg.showSnackBar(const SnackBar(
-          content: Text('Grooming record saved!'),
-          backgroundColor: _green,
-        ));
+        widget.onSaved?.call('Grooming');
       }
     } catch (e) {
-      if (mounted) msg.showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+      if (mounted) {
+        showRecordToast(context, 'Error: $e', isError: true);
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
-  Widget _lbl(String t, {bool req = false}) => Padding(
+  Widget _lbl(String t) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
-        child: Text(t, style: const TextStyle(color: _ink, fontWeight: FontWeight.bold, fontSize: 13)),
+        child: Text(t,
+            style: const TextStyle(
+                color: RecordsPalette.ink,
+                fontWeight: FontWeight.bold,
+                fontSize: 13)),
       );
 
-  InputDecoration _deco({String? hint, bool err = false, Widget? suffix}) => InputDecoration(
+  InputDecoration _deco({String? hint, bool err = false, Widget? suffix}) =>
+      InputDecoration(
         isDense: true,
         hintText: hint,
         counterText: '',
-        hintStyle: const TextStyle(color: Colors.grey, fontSize: 12),
+        hintStyle:
+            TextStyle(color: RecordsPalette.muted.withOpacity(0.7), fontSize: 12),
         suffixIcon: suffix,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(color: err ? Colors.red : _blue, width: 1.5)),
+            borderSide: BorderSide(
+                color: err ? Colors.red : RecordsPalette.linenDeep,
+                width: 1.5)),
         focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide(color: err ? Colors.red : _blue, width: 2)),
+            borderSide: BorderSide(
+                color: err ? Colors.red : RecordsPalette.steel, width: 2)),
       );
 
   @override
   Widget build(BuildContext ctx) {
-    final _dateRelation = dateRelation(parseDMY(_date.text));
+    final daterltn = dateRelation(parseDMY(_date.text));
     return SingleChildScrollView(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-        const Row(children: [
-          Icon(Icons.content_cut_outlined, color: _ink, size: 20),
-          SizedBox(width: 8),
-          Text('Add Grooming', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _ink)),
-        ]),
-        const SizedBox(height: 16),
+      child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5EEF8),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.content_cut_outlined,
+                    color: Color(0xFF8B6FAB), size: 18),
+              ),
+              const SizedBox(width: 10),
+              const Text('Add Grooming',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: RecordsPalette.ink)),
+            ]),
+            const SizedBox(height: 16),
 
-        // Clinic
-        _lbl('Clinic / Salon Name'),
-        TextField(
-            controller: _clinic,
-            maxLength: 100,
-            onChanged: (_) => setState(() => _clinicErr = null),
-            decoration: _deco(hint: 'e.g. Paws & Claws', err: _clinicErr != null)),
-        if (_clinicErr != null)
-          Padding(
-              padding: const EdgeInsets.only(top: 3),
-              child: Text(_clinicErr!, style: const TextStyle(color: Colors.red, fontSize: 11))),
-        const SizedBox(height: 14),
+            _lbl('Clinic / Salon Name'),
+            TextField(
+                controller: _clinic,
+                maxLength: 100,
+                onChanged: (_) => setState(() => _clinicErr = null),
+                decoration:
+                    _deco(hint: 'e.g. Paws & Claws', err: _clinicErr != null)),
+            if (_clinicErr != null)
+              Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text(_clinicErr!,
+                      style: const TextStyle(
+                          color: Colors.red, fontSize: 11))),
+            const SizedBox(height: 14),
 
-        // Date
-        _lbl('Date of Service'),
-        GestureDetector(
-          onTap: () async {
-            final pastOnly = _status == 'COMPLETED';
-            final d = await showDatePicker(
-              context: ctx,
-              initialDate: DateTime.now(),
-              firstDate: DateTime(2000),
-              lastDate: pastOnly ? DateTime.now() : DateTime(2101),
-              builder: (c, child) => Theme(
-                  data: Theme.of(c).copyWith(colorScheme: const ColorScheme.light(primary: _ink)), child: child!),
-            );
-            if (d != null) {
-              final formatted = DateFormat('dd.MM.yyyy').format(d);
-              final rel = dateRelation(parseDMY(formatted));
-              final corrected = autoCorrectStatus(_status, rel);
-              final changed = corrected != _status;
-              setState(() {
-                _date.text = formatted;
-                _status = corrected;
-                _dateErr = null;
-              });
-              if (changed && context.mounted) {
-                final nice = corrected[0] + corrected.substring(1).toLowerCase();
-                ScaffoldMessenger.of(context)
-                  ..hideCurrentSnackBar()
-                  ..showSnackBar(SnackBar(
-                    content: Text("Status updated to '$nice' for this date.",
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-                    backgroundColor: const Color(0xFF455A64),
-                    behavior: SnackBarBehavior.floating,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    duration: const Duration(seconds: 3),
-                  ));
-              }
-            }
-          },
-          child: AbsorbPointer(
-              child: TextField(
-                  controller: _date,
-                  decoration:
-                      _deco(hint: 'DD.MM.YYYY', err: _dateErr != null, suffix: const Icon(Icons.calendar_month, size: 18)))),
-        ),
-        if (_dateErr != null)
-          Padding(
-              padding: const EdgeInsets.only(top: 3),
-              child: Text(_dateErr!, style: const TextStyle(color: Colors.red, fontSize: 11))),
-        const SizedBox(height: 14),
-
-        // Type
-        _lbl('Type of Grooming'),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), border: Border.all(color: _blue, width: 1.5)),
-          child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-            value: _type,
-            isExpanded: true,
-            items: _groomTypes
-                .map((v) => DropdownMenuItem(
-                    value: v,
-                    child: Text(v, style: const TextStyle(color: _blue, fontSize: 13, fontWeight: FontWeight.bold))))
-                .toList(),
-            onChanged: (v) => setState(() => _type = v!),
-          )),
-        ),
-        const SizedBox(height: 14),
-
-        // Status
-        _lbl('Status'),
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          smartStatusBtn(
-              label: 'Upcoming',
-              color: const Color(0xFFFFB300),
-              current: _status,
-              rel: _dateRelation,
-              onSelect: (v) => setState(() {
-                    _status = v;
+            _lbl('Date of Service'),
+            GestureDetector(
+              onTap: () async {
+                final pastOnly = _status == 'COMPLETED';
+                final d = await showDatePicker(
+                  context: ctx,
+                  initialDate: DateTime.now(),
+                  firstDate: DateTime(2000),
+                  lastDate: pastOnly ? DateTime.now() : DateTime(2101),
+                  builder: (c, child) => Theme(
+                      data: Theme.of(c).copyWith(
+                          colorScheme: const ColorScheme.light(
+                              primary: RecordsPalette.steel)),
+                      child: child!),
+                );
+                if (d != null) {
+                  final formatted = DateFormat('dd.MM.yyyy').format(d);
+                  final rel = dateRelation(parseDMY(formatted));
+                  final corrected = autoCorrectStatus(_status, rel);
+                  final changed = corrected != _status;
+                  setState(() {
+                    _date.text = formatted;
+                    _status = corrected;
                     _dateErr = null;
-                  }),
-              context: context),
-          smartStatusBtn(
-              label: 'Ongoing',
-              color: const Color(0xFFD32F2F),
-              current: _status,
-              rel: _dateRelation,
-              onSelect: (v) => setState(() {
-                    _status = v;
-                    _dateErr = null;
-                  }),
-              context: context),
-          smartStatusBtn(
-              label: 'Completed',
-              color: const Color(0xFF388E3C),
-              current: _status,
-              rel: _dateRelation,
-              onSelect: (v) => setState(() {
-                    _status = v;
-                    _dateErr = null;
-                  }),
-              context: context),
-        ]),
-        const SizedBox(height: 24),
+                  });
+                  if (changed && context.mounted) {
+                    final nice =
+                        corrected[0] + corrected.substring(1).toLowerCase();
+                    showRecordToast(context, "Status updated to '$nice'",
+                        icon: Icons.info_outline_rounded);
+                  }
+                }
+              },
+              child: AbsorbPointer(
+                  child: TextField(
+                      controller: _date,
+                      decoration: _deco(
+                          hint: 'DD.MM.YYYY',
+                          err: _dateErr != null,
+                          suffix: Icon(Icons.calendar_month,
+                              size: 18, color: RecordsPalette.muted)))),
+            ),
+            if (_dateErr != null)
+              Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Text(_dateErr!,
+                      style: const TextStyle(
+                          color: Colors.red, fontSize: 11))),
+            const SizedBox(height: 14),
 
-        SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton(
-              onPressed: _saving ? null : _save,
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: _blue,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              child: _saving
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Text('SAVE GROOMING', style: TextStyle(fontWeight: FontWeight.bold)),
-            )),
-      ]),
+            _lbl('Type of Grooming'),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: RecordsPalette.linenDeep, width: 1.5)),
+              child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                value: _type,
+                isExpanded: true,
+                items: _groomTypes
+                    .map((v) => DropdownMenuItem(
+                        value: v,
+                        child: Text(v,
+                            style: const TextStyle(
+                                color: RecordsPalette.ink,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold))))
+                    .toList(),
+                onChanged: (v) => setState(() => _type = v!),
+              )),
+            ),
+            const SizedBox(height: 14),
+
+            _lbl('Status'),
+            Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  smartStatusBtn(
+                      label: 'Upcoming',
+                      color: const Color(0xFFBA7F57),
+                      current: _status,
+                      rel: daterltn,
+                      onSelect: (v) =>
+                          setState(() { _status = v; _dateErr = null; }),
+                      context: context),
+                  smartStatusBtn(
+                      label: 'Ongoing',
+                      color: RecordsPalette.steel,
+                      current: _status,
+                      rel: daterltn,
+                      onSelect: (v) =>
+                          setState(() { _status = v; _dateErr = null; }),
+                      context: context),
+                  smartStatusBtn(
+                      label: 'Completed',
+                      color: const Color(0xFF5A9E62),
+                      current: _status,
+                      rel: daterltn,
+                      onSelect: (v) =>
+                          setState(() { _status = v; _dateErr = null; }),
+                      context: context),
+                ]),
+            const SizedBox(height: 24),
+
+            SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: _saving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: RecordsPalette.steel,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12))),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2))
+                      : const Text('SAVE GROOMING',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                )),
+          ]),
     );
   }
 }

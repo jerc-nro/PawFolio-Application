@@ -30,15 +30,18 @@ class HomePetCard extends ConsumerWidget {
         width: 112,
         margin: const EdgeInsets.only(right: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFF2D3A4A),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [BoxShadow(
-            color: const Color(0xFF2D3A4A).withOpacity(0.35),
-            blurRadius: 10, offset: const Offset(0, 4),
-          )],
+          color: const Color(0xFF45617D),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF45617D).withOpacity(0.25),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -49,9 +52,11 @@ class HomePetCard extends ConsumerWidget {
                 child: petImage != null
                     ? Image(image: petImage, fit: BoxFit.cover)
                     : Container(
-                        color: const Color(0xFF3A4D5C),
-                        child: const Center(child: Icon(
-                            Icons.pets, color: Color(0xFF6B8090), size: 32))),
+                        color: const Color(0xFF3A5068),
+                        child: const Center(
+                          child: Icon(Icons.pets,
+                              color: Color(0xFF6B8CA4), size: 30)),
+                      ),
               ),
               // ── Info ───────────────────────────────────────
               Padding(
@@ -61,25 +66,35 @@ class HomePetCard extends ConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(pet.name,
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white,
-                            fontWeight: FontWeight.w800, fontSize: 13,
-                            letterSpacing: 0.2)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            letterSpacing: 0.1)),
                     const SizedBox(height: 2),
                     Text('${pet.type} · ${pet.breed}',
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: Colors.white.withOpacity(0.45),
-                            fontSize: 10, fontWeight: FontWeight.w500)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: Colors.white.withOpacity(0.5),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w400)),
                     const SizedBox(height: 8),
                     Container(
-                      height: 28, alignment: Alignment.center,
+                      height: 26,
+                      alignment: Alignment.center,
                       decoration: BoxDecoration(
-                          color: const Color(0xFF8B947E),
-                          borderRadius: BorderRadius.circular(14)),
+                        color: const Color(0xFFBA7F57),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       child: const Text('View Info',
-                          style: TextStyle(color: Colors.white,
-                              fontSize: 11, fontWeight: FontWeight.w700,
-                              letterSpacing: 0.3)),
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.2)),
                     ),
                   ],
                 ),
@@ -96,54 +111,55 @@ class HomePetCard extends ConsumerWidget {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF2D3A4A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
         actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // icon
             Container(
-              width: 56, height: 56,
+              width: 52, height: 52,
               decoration: BoxDecoration(
                   color: const Color(0xFFCF6679).withOpacity(0.15),
                   shape: BoxShape.circle),
               child: const Icon(Icons.archive_outlined,
-                  color: Color(0xFFCF6679), size: 28),
+                  color: Color(0xFFCF6679), size: 26),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             const Text('Archive Pet?',
-                style: TextStyle(color: Colors.white,
-                    fontWeight: FontWeight.w800, fontSize: 17)),
+                style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16)),
             const SizedBox(height: 8),
             Text(
-              'Are you sure you want to archive ${pet.name}? '
-              'You can restore them from the archived section anytime.',
+              'Archive ${pet.name}? You can restore them anytime.',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white54,
-                  fontSize: 13, height: 1.5),
+              style: const TextStyle(
+                  color: Colors.white54, fontSize: 13, height: 1.5),
             ),
           ],
         ),
         actions: [
           Row(children: [
-            // Cancel
             Expanded(
               child: GestureDetector(
                 onTap: () => Navigator.pop(context),
                 child: Container(
-                  height: 44, alignment: Alignment.center,
+                  height: 42, alignment: Alignment.center,
                   decoration: BoxDecoration(
                       color: Colors.white10,
-                      borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(10)),
                   child: const Text('Cancel',
-                      style: TextStyle(color: Colors.white70,
-                          fontWeight: FontWeight.w600, fontSize: 14)),
+                      style: TextStyle(
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14)),
                 ),
               ),
             ),
             const SizedBox(width: 10),
-            // Archive
             Expanded(
               child: GestureDetector(
                 onTap: () async {
@@ -153,13 +169,15 @@ class HomePetCard extends ConsumerWidget {
                       .archivePet(pet.petID);
                 },
                 child: Container(
-                  height: 44, alignment: Alignment.center,
+                  height: 42, alignment: Alignment.center,
                   decoration: BoxDecoration(
                       color: const Color(0xFFCF6679),
-                      borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(10)),
                   child: const Text('Archive',
-                      style: TextStyle(color: Colors.white,
-                          fontWeight: FontWeight.w700, fontSize: 14)),
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14)),
                 ),
               ),
             ),
