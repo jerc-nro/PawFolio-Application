@@ -162,7 +162,7 @@ class WeightHistoryView extends ConsumerWidget {
         DateTime? maxDate;
         DateTime? maxCreatedAt;
 
-        DateTime _getCreatedAt(QueryDocumentSnapshot d) {
+        DateTime getCreatedAt(QueryDocumentSnapshot d) {
           final raw = (d.data() as Map<String, dynamic>)['createdAt'];
           if (raw is Timestamp) return raw.toDate();
           return DateTime.fromMillisecondsSinceEpoch(0);
@@ -170,7 +170,7 @@ class WeightHistoryView extends ConsumerWidget {
 
         for (final doc in docs) {
           final date      = _parseDateForSort(doc);
-          final createdAt = _getCreatedAt(doc);
+          final createdAt = getCreatedAt(doc);
 
           if (currentDoc == null) {
             currentDoc  = doc;
@@ -513,7 +513,7 @@ class WeightHistoryView extends ConsumerWidget {
               barWidth: 3,
               dotData: FlDotData(
                 show: true,
-                getDotPainter: (spot, _, __, idx) {
+                getDotPainter: (spot, _, _, idx) {
                   final isLatest = idx == spots.length - 1;
                   return FlDotCirclePainter(
                     radius: isLatest ? 6 : 4,

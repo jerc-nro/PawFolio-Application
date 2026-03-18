@@ -543,7 +543,7 @@ class _DrawerToggleTile extends StatelessWidget {
         Switch(
           value: value,
           onChanged: onChanged,
-          activeColor: _kNavy,
+          activeThumbColor: _kNavy,
           activeTrackColor: _kNavy.withOpacity(0.25),
           inactiveThumbColor: Colors.grey.shade400,
           inactiveTrackColor: Colors.grey.shade200,

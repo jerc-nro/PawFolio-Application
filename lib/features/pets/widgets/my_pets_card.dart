@@ -147,7 +147,7 @@ class _CardFront extends StatelessWidget {
                         base64Decode(pet.profileBase64!),
                         fit: BoxFit.cover,
                         gaplessPlayback: true,
-                        errorBuilder: (_, __, ___) => _Placeholder(pet.type),
+                        errorBuilder: (_, _, _) => _Placeholder(pet.type),
                       )
                     : _Placeholder(pet.type),
 

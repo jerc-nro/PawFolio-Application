@@ -60,8 +60,9 @@ class _VetState extends ConsumerState<_VetContent> {
 
   @override
   void dispose() {
-    for (final c in [_reason, _date, _time, _clinic, _vet, _notes])
+    for (final c in [_reason, _date, _time, _clinic, _vet, _notes]) {
       c.dispose();
+    }
     super.dispose();
   }
 
@@ -83,8 +84,9 @@ class _VetState extends ConsumerState<_VetContent> {
     if (v.trim().isEmpty) return 'Date is required';
     final d = _parseDateStr(v);
     if (d == null) return 'Invalid date';
-    if (_status == 'COMPLETED' && d.isAfter(DateTime.now()))
+    if (_status == 'COMPLETED' && d.isAfter(DateTime.now())) {
       return 'Past/present date required for Completed';
+    }
     return null;
   }
 

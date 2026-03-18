@@ -66,8 +66,9 @@ class _PS extends ConsumerState<_PrevContent> {
 
   @override
   void dispose() {
-    for (final c in [_brand, _date, _clinic, _vet, _dosage, _other, _time])
+    for (final c in [_brand, _date, _clinic, _vet, _dosage, _other, _time]) {
       c.dispose();
+    }
     super.dispose();
   }
 
@@ -82,8 +83,9 @@ class _PS extends ConsumerState<_PrevContent> {
     if (v.trim().isEmpty) return 'Date is required';
     final d = _parseDate(v);
     if (d == null) return 'Invalid date';
-    if (_status == 'COMPLETED' && d.isAfter(DateTime.now()))
+    if (_status == 'COMPLETED' && d.isAfter(DateTime.now())) {
       return 'Past/present date required for Completed';
+    }
     return null;
   }
 
@@ -154,8 +156,9 @@ class _PS extends ConsumerState<_PrevContent> {
       _dateErr   = _validateDate(_date.text);
       _dosageErr = _validateDosage(_dosage.text);
     });
-    if ([_brandErr, _dateErr, _dosageErr].any((e) => e != null) || _saving)
+    if ([_brandErr, _dateErr, _dosageErr].any((e) => e != null) || _saving) {
       return;
+    }
 
     setState(() => _saving = true);
     final nav = Navigator.of(context);

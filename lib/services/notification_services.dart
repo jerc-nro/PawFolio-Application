@@ -194,7 +194,7 @@ class NotificationService {
       case 'Vet Visit':
         return _Msg(
           title: '🏥 Vet visit tomorrow — $name',
-          body:  "${name}'s vet appointment is tomorrow. Prepare any questions and bring their records.",
+          body:  "$name's vet appointment is tomorrow. Prepare any questions and bring their records.",
         );
 
       case 'Grooming':

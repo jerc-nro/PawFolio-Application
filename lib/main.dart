@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'features/auth/providers/auth_provider.dart';
 import 'features/auth/screens/login_page.dart';
@@ -22,7 +21,11 @@ void main() async {
     debugPrint('Firebase initialization failed: $e');
   }
 
+  try {
   await NotificationService.init();
+  } catch (e) {
+    debugPrint("Notification Init Failed: $e");
+  }
 
   runApp(const ProviderScope(child: PawfolioApp()));
 }

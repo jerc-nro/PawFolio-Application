@@ -61,7 +61,9 @@ class _VS extends ConsumerState<_VaccineContent> {
 
   @override
   void dispose() {
-    for (final c in [_name, _date, _vet, _dosage, _time]) c.dispose();
+    for (final c in [_name, _date, _vet, _dosage, _time]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -76,8 +78,9 @@ class _VS extends ConsumerState<_VaccineContent> {
     if (v.trim().isEmpty) return 'Date is required';
     final d = _parseDateStr(v);
     if (d == null) return 'Invalid date';
-    if (_status != 'UPCOMING' && d.isAfter(DateTime.now()))
+    if (_status != 'UPCOMING' && d.isAfter(DateTime.now())) {
       return 'Past/present date required for this status';
+    }
     return null;
   }
 
@@ -140,8 +143,9 @@ class _VS extends ConsumerState<_VaccineContent> {
       _timeErr =
           timeRequired ? 'Time required for Completed status' : null;
     });
-    if ([_nameErr, _dateErr, _timeErr].any((e) => e != null) || _saving)
+    if ([_nameErr, _dateErr, _timeErr].any((e) => e != null) || _saving) {
       return;
+    }
 
     setState(() => _saving = true);
     final nav = Navigator.of(context);

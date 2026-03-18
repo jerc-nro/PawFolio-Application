@@ -244,8 +244,9 @@ class _PetProfilePageState extends ConsumerState<PetProfilePage> {
       _pendingFields.clear();
       if (mounted) showRecordToast(context, 'Changes saved ✓');
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         showRecordToast(context, 'Save failed: $e', isError: true);
+      }
     }
   }
 }
@@ -431,8 +432,9 @@ class _PetStatusCard extends ConsumerWidget {
       showRecordToast(context, '${pet.name} has been marked as deceased.',
           isError: true, icon: Icons.heart_broken_outlined);
     } catch (e) {
-      if (context.mounted)
+      if (context.mounted) {
         showRecordToast(context, 'Error: $e', isError: true);
+      }
     }
   }
 }

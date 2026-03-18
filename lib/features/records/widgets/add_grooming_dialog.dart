@@ -77,8 +77,9 @@ class _GS extends ConsumerState<_GroomContent> {
     if (v.trim().isEmpty) return 'Date is required';
     final d = _parseDate(v);
     if (d == null) return 'Invalid date';
-    if (_status == 'COMPLETED' && d.isAfter(DateTime.now()))
+    if (_status == 'COMPLETED' && d.isAfter(DateTime.now())) {
       return 'Past/present date required for Completed';
+    }
     return null;
   }
 

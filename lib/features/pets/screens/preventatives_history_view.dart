@@ -151,16 +151,19 @@ class PreventativesHistoryView extends ConsumerWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: query.snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.hasError)
+        if (snapshot.hasError) {
           return Center(child: Text("Error: ${snapshot.error}"));
-        if (snapshot.connectionState == ConnectionState.waiting)
+        }
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
+        }
 
         final allDocs = snapshot.data?.docs ?? [];
         final docs = allDocs.where((d) => (d.data() as Map<String,dynamic>)['is_archived'] != true).toList();
-        if (docs.isEmpty)
+        if (docs.isEmpty) {
           return const Center(child: Text("No records found.",
               style: TextStyle(color: Colors.grey)));
+        }
 
         return ListView.builder(
           physics: const BouncingScrollPhysics(),

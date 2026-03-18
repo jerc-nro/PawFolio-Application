@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart';
 
 void showEditWeightDialog(BuildContext context, String petId, QueryDocumentSnapshot doc) {
   final data = doc.data() as Map<String, dynamic>;

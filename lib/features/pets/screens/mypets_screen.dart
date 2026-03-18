@@ -214,7 +214,7 @@ class MyPetsScreen extends ConsumerWidget {
                 loading: () => Center(
                     child: CircularProgressIndicator(
                         color: RecordsPalette.steel)),
-                error: (_, __) => const Center(
+                error: (_, _) => const Center(
                     child: Text('Something went wrong',
                         style:
                             TextStyle(color: RecordsPalette.muted))),

@@ -62,7 +62,9 @@ class _MedState extends ConsumerState<_MedContent> {
 
   @override
   void dispose() {
-    for (final c in [_name, _date, _clinic, _vet, _dosage, _wgt]) c.dispose();
+    for (final c in [_name, _date, _clinic, _vet, _dosage, _wgt]) {
+      c.dispose();
+    }
     super.dispose();
   }
 

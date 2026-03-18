@@ -404,7 +404,7 @@ class _ArchivePetPicker extends ConsumerWidget {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: pets.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
                   itemBuilder: (context, i) {
                     final pet = pets[i];
                     return _PetArchiveTile(
