@@ -1,0 +1,404 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../pets/providers/pet_provider.dart';
+import '../providers/home_record_provider.dart';
+import '../widgets/home_pet_card.dart';
+import '../widgets/home_schedule_calendar.dart';
+import '../widgets/home_record_tile.dart';
+import '../../../../core/main_navigation_screen.dart';
+
+class HomeContent extends ConsumerWidget {
+  const HomeContent({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
+    final user      = authState.user;
+    final petsAsync = ref.watch(activePetsProvider);
+    final recAsync  = ref.watch(recentRecordsProvider(5));
+    final totalPets = petsAsync.valueOrNull?.length ?? 0;
+
+    final String? b64 = authState.localBase64 ?? user?.profileBase64;
+    ImageProvider? profileImage;
+    if (b64 != null && b64.isNotEmpty) {
+      try { profileImage = MemoryImage(base64Decode(b64)); } catch (_) {}
+    } else if (user?.photoUrl != null &&
+        user!.photoUrl!.isNotEmpty &&
+        !user.photoUrl!.contains('profile/picture/0')) {
+      final url = user.photoUrl!.contains('=s')
+          ? user.photoUrl!.replaceAll(RegExp(r'=s\d+'), '=s200')
+          : '${user.photoUrl}=s200';
+      profileImage = NetworkImage(url);
+    }
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F2EE),
+      body: SafeArea(
+        child: CustomScrollView(slivers: [
+
+          // ── Header ──────────────────────────────────────────
+          SliverToBoxAdapter(child: _HomeHeader(
+            username: user?.username ?? 'User',
+            totalPets: totalPets,
+            profileImage: profileImage,
+            onAvatarTap: () =>
+                ref.read(navigationIndexProvider.notifier).setIndex(3),
+          )),
+
+          // ── My Pets ─────────────────────────────────────────
+          SliverToBoxAdapter(child: _SectionHeader(
+            title: 'MY PETS', actionLabel: 'See all',
+            onTap: () =>
+                ref.read(navigationIndexProvider.notifier).setIndex(1),
+          )),
+          SliverToBoxAdapter(child: SizedBox(
+            height: 210,
+            child: petsAsync.when(
+              loading: () =>
+                  const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Error: $e')),
+              data: (pets) => pets.isEmpty
+                  ? const Center(child: Text('No pets yet',
+                      style: TextStyle(color: Color(0xFF9E9E9E))))
+                  : ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: pets.length,
+                      itemBuilder: (_, i) => HomePetCard(pet: pets[i]),
+                    ),
+            ),
+          )),
+
+          const SliverToBoxAdapter(child: SizedBox(height: 20)),
+
+          // ── Calendar ────────────────────────────────────────
+          SliverToBoxAdapter(child: _SectionHeader(
+              title: 'CALENDAR', actionLabel: '', onTap: () {})),
+          const SliverToBoxAdapter(child: HomeScheduleCalendar()),
+
+          const SliverToBoxAdapter(child: SizedBox(height: 20)),
+
+          // ── Recent Records ───────────────────────────────────
+          SliverToBoxAdapter(child: _SectionHeader(
+            title: 'RECENT RECORDS', actionLabel: 'See all',
+            onTap: () => _showAllRecords(context, ref),
+          )),
+          recAsync.when(
+            loading: () => const SliverToBoxAdapter(
+                child: Center(child: CircularProgressIndicator())),
+            error: (e, _) =>
+                SliverToBoxAdapter(child: Text('Error: $e')),
+            data: (records) => records.isEmpty
+                ? const SliverToBoxAdapter(child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: Text('No records yet',
+                        style: TextStyle(color: Color(0xFF9E9E9E))))))
+                : SliverList(delegate: SliverChildBuilderDelegate(
+                    (_, i) => HomeRecordTile(record: records[i]),
+                    childCount: records.length.clamp(0, 5),
+                  )),
+          ),
+
+          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+        ]),
+      ),
+    );
+  }
+
+  void _showAllRecords(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => ProviderScope(
+        parent: ProviderScope.containerOf(context),
+        child: const _AllRecordsSheet(),
+      ),
+    );
+  }
+}
+
+// ── All Records Sheet ─────────────────────────────────────────────────────────
+class _AllRecordsSheet extends ConsumerStatefulWidget {
+  const _AllRecordsSheet();
+  @override
+  ConsumerState<_AllRecordsSheet> createState() => _AllRecordsSheetState();
+}
+
+class _AllRecordsSheetState extends ConsumerState<_AllRecordsSheet> {
+  String? _filter;
+
+  // Keys = exact Firestore status values, values = display label + color
+  static const _filters = ['UPCOMING', 'ONGOING', 'COMPLETED', 'OVERDUE'];
+  static const _filterLabel = {
+    'UPCOMING':  'Upcoming',
+    'ONGOING':   'Ongoing',
+    'COMPLETED': 'Done',
+    'OVERDUE':   'Overdue',
+  };
+  static const _filterColor = {
+    'UPCOMING':  Color(0xFF45617D),
+    'ONGOING':   Color(0xFFBA7F57),
+    'COMPLETED': Color(0xFF5A9E62),
+    'OVERDUE':   Color(0xFFCF6679),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final recAsync = ref.watch(recentRecordsProvider(200));
+    return DraggableScrollableSheet(
+      initialChildSize: 0.75, minChildSize: 0.5, maxChildSize: 0.95,
+      builder: (_, sc) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFFF5F2EE),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 4),
+            child: Container(width: 38, height: 4,
+              decoration: BoxDecoration(color: Colors.black12,
+                  borderRadius: BorderRadius.circular(2)))),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 16, 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Row(children: [
+                  Icon(Icons.history_rounded,
+                      color: Color(0xFF8B947E), size: 20),
+                  SizedBox(width: 8),
+                  Text('All Records',
+                      style: TextStyle(fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF2D3A4A))),
+                ]),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.06),
+                        borderRadius: BorderRadius.circular(8)),
+                    child: const Icon(Icons.close_rounded,
+                        size: 18, color: Color(0xFF2D3A4A)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 34,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                _FilterChip(label: 'All', selected: _filter == null,
+                    color: const Color(0xFF45617D),
+                    onTap: () => setState(() => _filter = null)),
+                ..._filters.map((f) => _FilterChip(
+                  label: _filterLabel[f]!,
+                  selected: _filter == f,
+                  color: _filterColor[f]!,
+                  onTap: () => setState(
+                      () => _filter = _filter == f ? null : f),
+                )),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Divider(height: 1, color: Colors.black12),
+          Expanded(child: recAsync.when(
+            loading: () =>
+                const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(child: Text('Error: $e')),
+            data: (records) {
+              final filtered = _filter == null
+                  ? records
+                  : records.where((r) => r.status == _filter).toList();
+              if (filtered.isEmpty) {
+                return Center(child: Text(
+                  _filter == null
+                      ? 'No records yet'
+                      : 'No ${_filterLabel[_filter]!.toLowerCase()} records',
+                  style: const TextStyle(
+                      fontSize: 13, color: Color(0xFF9E9E9E))));
+              }
+              // FIX: Do NOT pass `sc` to ListView.builder.
+              // `sc` is the DraggableScrollableSheet's controller and must
+              // only be attached to ONE scrollable at a time. When the filter
+              // changes, the old ListView is disposed and a new one is built —
+              // Flutter then tries to re-attach `sc` to the new ListView but
+              // fails silently, rendering a blank list.
+              //
+              // Instead, give each filtered ListView its own fresh controller
+              // via `PrimaryScrollController` (the default when no controller
+              // is passed), which works correctly inside the Expanded+Column
+              // layout. The sheet dragging still works because
+              // DraggableScrollableSheet intercepts scroll events at the
+              // sheet level regardless.
+              return ListView.builder(
+                primary: true,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                itemCount: filtered.length,
+                itemBuilder: (_, i) => HomeRecordTile(record: filtered[i]),
+              );
+            },
+          )),
+        ]),
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+  const _FilterChip({required this.label, required this.selected,
+      required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        margin: const EdgeInsets.only(right: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? color : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: selected ? color : const Color(0xFFE8DDD6)),
+          boxShadow: selected
+              ? [BoxShadow(color: color.withOpacity(0.18),
+                  blurRadius: 6, offset: const Offset(0, 2))]
+              : [],
+        ),
+        child: Text(label, style: TextStyle(
+          fontSize: 12, fontWeight: FontWeight.w600,
+          color: selected ? Colors.white : const Color(0xFF8A7060),
+        )),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title, actionLabel;
+  final VoidCallback onTap;
+  const _SectionHeader({required this.title, required this.actionLabel,
+      required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(children: [
+          Container(width: 6, height: 6,
+              decoration: const BoxDecoration(
+                  color: Color(0xFF8B947E), shape: BoxShape.circle)),
+          const SizedBox(width: 6),
+          Text(title, style: const TextStyle(fontSize: 12,
+              fontWeight: FontWeight.w700, color: Color(0xFF4A4A4A),
+              letterSpacing: 0.8)),
+        ]),
+        if (actionLabel.isNotEmpty)
+          GestureDetector(onTap: onTap,
+            child: Text(actionLabel, style: const TextStyle(
+                fontSize: 12, color: Color(0xFF8B947E),
+                fontWeight: FontWeight.w600))),
+      ],
+    ),
+  );
+}
+
+class _HomeHeader extends StatelessWidget {
+  final String username;
+  final int totalPets;
+  final ImageProvider? profileImage;
+  final VoidCallback onAvatarTap;
+  const _HomeHeader({required this.username, required this.totalPets,
+      this.profileImage, required this.onAvatarTap});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(22, 24, 22, 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // ── Tappable avatar ──────────────────────────────────
+        GestureDetector(
+          onTap: onAvatarTap,
+          child: Stack(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: const Color(0xFFDDD5CE),
+                foregroundImage: profileImage,
+                child: const Icon(Icons.person_rounded,
+                    size: 24, color: Color(0xFF8B947E)),
+              ),
+              Positioned(
+                bottom: 0, right: 0,
+                child: Container(
+                  width: 14, height: 14,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF45617D),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                  child: const Icon(Icons.chevron_right_rounded,
+                      size: 9, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Hello, $username!',
+                  style: const TextStyle(fontSize: 20,
+                      fontWeight: FontWeight.w800, color: Color(0xFF2D3A4A),
+                      letterSpacing: -0.3)),
+              const SizedBox(height: 2),
+              Row(children: [
+                Container(width: 6, height: 6,
+                    decoration: const BoxDecoration(
+                        color: Color(0xFF8B947E), shape: BoxShape.circle)),
+                const SizedBox(width: 5),
+                Text('$totalPets ${totalPets == 1 ? "pet" : "pets"} registered',
+                    style: const TextStyle(fontSize: 12,
+                        color: Color(0xFF9A8F88),
+                        fontWeight: FontWeight.w500)),
+              ]),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+              color: const Color(0xFF2D3A4A),
+              borderRadius: BorderRadius.circular(20)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.pets, color: Color(0xFF8B947E), size: 13),
+            const SizedBox(width: 5),
+            Text('$totalPets', style: const TextStyle(fontSize: 15,
+                fontWeight: FontWeight.w800, color: Colors.white)),
+          ]),
+        ),
+      ],
+    ),
+  );
+}
