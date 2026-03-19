@@ -104,7 +104,7 @@ flutter:
   # see https://flutter.dev/to/font-from-package
 
 flutter_launcher_icons:
-  android: true
+  android: false
   ios: true
   image_path: "assets/images/pawfolio_logo.png" # Path to your high-res image
   adaptive_icon_background: "#ffffff" # Required for newer Android versions

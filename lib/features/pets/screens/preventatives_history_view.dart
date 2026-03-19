@@ -14,6 +14,26 @@ import '../../records/screen/archived_records_page.dart';
 final preventativeFilterProvider =
     StateProvider.autoDispose<String>((ref) => "ALL");
 
+/// ✅ Helper: Normalize status to Title-case (accepts UPPERCASE, lowercase, or Title-case)
+String _normalizeStatus(String? status) {
+  if (status == null || status.isEmpty) return 'Upcoming';
+  
+  final upper = status.toUpperCase().trim();
+  
+  switch (upper) {
+    case 'UPCOMING':
+      return 'Upcoming';
+    case 'ONGOING':
+      return 'Ongoing';
+    case 'OVERDUE':
+      return 'Overdue';
+    case 'COMPLETED':
+      return 'Completed';
+    default:
+      return 'Upcoming'; // Default fallback
+  }
+}
+
 class PreventativesHistoryView extends ConsumerWidget {
   final Pet pet;
   const PreventativesHistoryView({super.key, required this.pet});
@@ -170,8 +190,7 @@ class PreventativesHistoryView extends ConsumerWidget {
       String? uid, String currentFilter) {
     if (uid == null) return const Center(child: Text("Please log in."));
 
-    // Single query — no composite index needed.
-    // is_archived and status are filtered client-side.
+    // ✅ Query ALL documents, filter client-side
     final Query query = FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
@@ -192,15 +211,22 @@ class PreventativesHistoryView extends ConsumerWidget {
         }
 
         final allDocs = snapshot.data?.docs ?? [];
-        // Client-side filtering: exclude archived, apply status filter
+        
+        // ✅ FIX: Normalize status for comparison
         final docs = allDocs.where((d) {
           final data = d.data() as Map<String, dynamic>;
+          
+          // Always exclude archived records
           if (data['is_archived'] == true) return false;
-          if (currentFilter != 'ALL') {
-            final status = (data['status'] ?? '').toString();
-            if (status != currentFilter) return false;
-          }
-          return true;
+          
+          // Normalize the status from Firestore (accepts UPPERCASE, lowercase, or Title-case)
+          final normalizedStatus = _normalizeStatus(data['status'] as String?);
+          
+          // If 'ALL' is selected, show all non-archived records
+          if (currentFilter == 'ALL') return true;
+          
+          // Otherwise, match the status with the filter value
+          return normalizedStatus == currentFilter;
         }).toList();
 
         if (docs.isEmpty) {
@@ -223,7 +249,7 @@ class PreventativesHistoryView extends ConsumerWidget {
               brand: extra['brand_name'] ??
                   data['brand_name'] ?? 'Generic',
               type: extra['type'] ?? data['type'] ?? 'Preventative',
-              status: (data['status'] ?? 'Upcoming').toString(),
+              status: _normalizeStatus(data['status'] as String?),  // ✅ Normalize status
               date: data['date_string'] ?? 'N/A',
               time: extra['time'] ?? data['intake_time'] ?? 'N/A',
               dosage: extra['dosage'] ?? data['dosage'] ?? 'N/A',

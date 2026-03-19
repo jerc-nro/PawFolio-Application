@@ -1,14 +1,18 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_core/firebase_core.dart';
 
-import 'features/auth/providers/auth_provider.dart';
-import 'features/auth/screens/login_page.dart';
-import 'features/pets/screens/add_pet_page.dart';
+// Core & Services
 import 'core/main_navigation_screen.dart';
+import 'features/records/providers/notification_settings_provider.dart';
 import 'firebase_options.dart';
 import 'services/notification_services.dart';
 import 'services/overdue_services.dart';
+
+// Features
+import 'features/auth/providers/auth_provider.dart';
+import 'features/auth/screens/login_page.dart';
+import 'features/pets/screens/add_pet_page.dart';
 
 final messengerKey = GlobalKey<ScaffoldMessengerState>();
 
@@ -17,18 +21,24 @@ void main() async {
 
   try {
     await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform);
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
   } catch (e) {
     debugPrint('Firebase initialization failed: $e');
   }
 
   try {
-    await NotificationService.init();
+    // sets up channel only, no permission popup yet
+    await NotificationService.init(); 
   } catch (e) {
     debugPrint('Notification Init Failed: $e');
   }
 
-  runApp(const ProviderScope(child: PawfolioApp()));
+  runApp(
+    const ProviderScope(
+      child: PawfolioApp(),
+    ),
+  );
 }
 
 class PawfolioApp extends ConsumerWidget {
@@ -46,6 +56,7 @@ class PawfolioApp extends ConsumerWidget {
         useMaterial3: true,
         colorSchemeSeed: const Color(0xFF8B947E),
         scaffoldBackgroundColor: const Color(0xFFF5F2EE),
+        fontFamily: 'Outfit', // Assuming you're using this for your minimalist look
       ),
       home: _resolveHome(authState, ref),
     );
@@ -56,35 +67,49 @@ class PawfolioApp extends ConsumerWidget {
     if (authState.user == null) return const LoginPage();
     if (authState.isLoading) return const _LoadingHomeScreen();
 
+    // Force new users to see the Add Pet screen
     if (authState.isNewUser) {
       return _NewUserGate(
         onDone: () => ref.read(authProvider.notifier).clearNewUserFlag(),
       );
     }
 
+    // Existing users go through the data check gate
     return _OverdueGate(uid: authState.user!.userID);
   }
 }
 
 // ─── Overdue Gate ─────────────────────────────────────────────────────────────
-
-class _OverdueGate extends StatefulWidget {
+/// Checks for overdue records and handles notification prompts before showing Home.
+class _OverdueGate extends ConsumerStatefulWidget {
   final String uid;
   const _OverdueGate({required this.uid});
 
   @override
-  State<_OverdueGate> createState() => _OverdueGateState();
+  ConsumerState<_OverdueGate> createState() => _OverdueGateState();
 }
 
-class _OverdueGateState extends State<_OverdueGate> {
+class _OverdueGateState extends ConsumerState<_OverdueGate> {
   bool _ready = false;
 
   @override
   void initState() {
     super.initState();
-    OverdueService.markOverdueRecords(widget.uid).then((_) {
-      if (mounted) setState(() => _ready = true);
-    });
+    _prepareAppData();
+  }
+
+  Future<void> _prepareAppData() async {
+    // 1. Mark records as overdue in Firestore
+    await OverdueService.markOverdueRecords(widget.uid);
+    
+    if (mounted) {
+      setState(() => _ready = true);
+
+      // 2. Ask for notification permission ONCE if never asked before
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(notificationSettingsProvider.notifier).askOnFirstLaunch();
+      });
+    }
   }
 
   @override
@@ -95,15 +120,15 @@ class _OverdueGateState extends State<_OverdueGate> {
 }
 
 // ─── New User Gate ────────────────────────────────────────────────────────────
-
+/// Wraps AddPetPage to prevent navigation until a pet is added or skipped.
 class _NewUserGate extends StatelessWidget {
   final VoidCallback onDone;
   const _NewUserGate({required this.onDone});
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async => false,
+    return PopScope(
+      canPop: false, // Prevents back gesture on Android/iOS
       child: Scaffold(
         body: Stack(
           children: [
@@ -121,8 +146,9 @@ class _NewUserGate extends StatelessWidget {
                     child: const Text(
                       'Skip',
                       style: TextStyle(
-                          color: Color(0xFF45617D),
-                          fontWeight: FontWeight.w600),
+                        color: Color(0xFF45617D),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -143,14 +169,17 @@ class _SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: Color(0xFFD7CCC8),
+      backgroundColor: Color(0xFFD7CCC8), // Earthy tone
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.pets, size: 64, color: Color(0xFF45617D)),
             SizedBox(height: 24),
-            CircularProgressIndicator(color: Color(0xFF8B947E)),
+            CircularProgressIndicator(
+              color: Color(0xFF8B947E),
+              strokeWidth: 3,
+            ),
           ],
         ),
       ),
@@ -164,9 +193,12 @@ class _LoadingHomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: Color(0xFFD7CCC8),
+      backgroundColor: Color(0xFFF5F2EE),
       body: Center(
-        child: CircularProgressIndicator(color: Color(0xFF8B947E)),
+        child: CircularProgressIndicator(
+          color: Color(0xFF8B947E),
+          strokeWidth: 2,
+        ),
       ),
     );
   }

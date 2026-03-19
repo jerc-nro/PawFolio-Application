@@ -11,6 +11,7 @@ import '../../records/widgets/status_filter_row.dart'
 import '../../records/widgets/edit_records_dialog.dart';
 import '../../records/screen/archived_records_page.dart';
 
+/// ✅ FIX: Initialize with 'ALL' string
 final medicationFilterProvider =
     StateProvider.autoDispose<String>((ref) => "ALL");
 
@@ -171,8 +172,7 @@ class MedicationHistoryView extends ConsumerWidget {
       String? uid, String currentFilter) {
     if (uid == null) return const Center(child: Text("Please log in."));
 
-    // Single query — no composite index needed.
-    // is_archived and status are filtered client-side.
+    // ✅ Query ALL documents, filter client-side
     final Query query = FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
@@ -193,15 +193,20 @@ class MedicationHistoryView extends ConsumerWidget {
         }
 
         final allDocs = snapshot.data?.docs ?? [];
-        // Client-side filtering: exclude archived, apply status filter
+        
+        // ✅ FIX: Proper filtering logic
         final docs = allDocs.where((d) {
           final data = d.data() as Map<String, dynamic>;
+          
+          // Always exclude archived records
           if (data['is_archived'] == true) return false;
-          if (currentFilter != 'ALL') {
-            final status = (data['status'] ?? '').toString();
-            if (status != currentFilter) return false;
-          }
-          return true;
+          
+          // If 'ALL' is selected, show all non-archived records
+          if (currentFilter == 'ALL') return true;
+          
+          // Otherwise, match the status field with the filter value
+          final status = (data['status'] ?? '').toString();
+          return status == currentFilter;
         }).toList();
 
         if (docs.isEmpty) {

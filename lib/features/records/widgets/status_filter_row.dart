@@ -1,40 +1,38 @@
 import 'package:flutter/material.dart';
 
-/// Maps display label (uppercase) → Firestore value (title-case).
-/// The filter providers and Firestore queries should always use the
-/// Firestore value so they match what is actually stored in the DB.
+/// Maps display label → Firestore value (both UPPERCASE now)
 const Map<String, String> statusFilterValues = {
   'ALL':       'ALL',
-  'UPCOMING':  'Upcoming',
-  'ONGOING':   'Ongoing',
-  'OVERDUE':   'Overdue',
-  'COMPLETED': 'Completed',
+  'UPCOMING':  'UPCOMING',
+  'ONGOING':   'ONGOING',
+  'OVERDUE':   'OVERDUE',
+  'COMPLETED': 'COMPLETED',
 };
 
-/// Returns the display label for a given Firestore status value.
-String statusDisplayLabel(String firestoreValue) {
-  return statusFilterValues.entries
-      .firstWhere(
-        (e) => e.value == firestoreValue,
-        orElse: () => MapEntry(firestoreValue.toUpperCase(), firestoreValue),
-      )
-      .key;
+/// Returns the display label - just returns uppercase as-is
+String statusDisplayLabel(String? firestoreValue) {
+  if (firestoreValue == null || firestoreValue.isEmpty) {
+    return 'UNKNOWN';
+  }
+  return firestoreValue.toUpperCase().trim();
 }
 
-/// Returns the color for a status value (accepts both display and Firestore forms).
-Color statusColor(String status) {
-  final normalized = status.toLowerCase();
-  if (normalized == 'completed') return const Color(0xFF388E3C);
-  if (normalized == 'ongoing')   return const Color(0xFFD32F2F);
-  if (normalized == 'overdue')   return const Color(0xFFBD4B4B);
-  if (normalized == 'upcoming')  return const Color(0xFFFFB300);
+/// Returns the color for a status value
+Color statusColor(String? status) {
+  if (status == null || status.isEmpty) return Colors.grey;
+  
+  final upper = status.toUpperCase().trim();
+  if (upper == 'COMPLETED') return const Color(0xFF388E3C);
+  if (upper == 'ONGOING')   return const Color(0xFFD32F2F);
+  if (upper == 'OVERDUE')   return const Color(0xFFBD4B4B);
+  if (upper == 'UPCOMING')  return const Color(0xFFFFB300);
   return Colors.grey;
 }
 
 class StatusFilterRow extends StatelessWidget {
-  /// [selectedStatus] should be the **Firestore** value (title-case) or "ALL".
+  /// [selectedStatus] should be UPPERCASE (e.g., "UPCOMING", "COMPLETED")
   final String selectedStatus;
-  /// [onStatusSelected] will receive the **Firestore** value (title-case) or "ALL".
+  /// [onStatusSelected] will receive UPPERCASE status
   final Function(String) onStatusSelected;
 
   const StatusFilterRow({
@@ -45,7 +43,6 @@ class StatusFilterRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Display order of chips
     const List<String> labels = [
       'ALL',
       'UPCOMING',
@@ -61,7 +58,7 @@ class StatusFilterRow extends StatelessWidget {
       child: Row(
         children: labels.map((label) {
           final firestoreValue = statusFilterValues[label]!;
-          final bool isSelected = selectedStatus == firestoreValue;
+          final isSelected = selectedStatus == firestoreValue;
           final Color activeColor = label == 'OVERDUE'
               ? const Color(0xFFBD4B4B)
               : const Color(0xFF455A64);

@@ -12,52 +12,58 @@ class NotificationService {
   static const _channelName = 'Pet Reminders';
   static const _icon        = 'pawfolio_logo';
 
-  // ─── Init ─────────────────────────────────────────────────────────────────
-static Future<void> init() async {
-  if (kIsWeb) return;
+  // ─── Init (no permission request here) ───────────────────────────────────
+  static Future<void> init() async {
+    if (kIsWeb) return;
 
-  // 1. Initialize Timezones
-  tz.initializeTimeZones();
+    tz.initializeTimeZones();
 
-  // 2. Setup Android Initialization Settings
-  const AndroidInitializationSettings initializationSettingsAndroid =
-      AndroidInitializationSettings(_icon);
+    const AndroidInitializationSettings androidSettings =
+        AndroidInitializationSettings(_icon);
 
-  const InitializationSettings initializationSettings = InitializationSettings(
-    android: initializationSettingsAndroid,
-  );
+    const InitializationSettings initSettings =
+        InitializationSettings(android: androidSettings);
 
-  await _notifications.initialize(initializationSettings);
+    await _notifications.initialize(initSettings);
 
-  // 3. Resolve Platform Specific Implementation (Fixed Syntax)
-  final android = _notifications.resolvePlatformSpecificImplementation<
-      AndroidFlutterLocalNotificationsPlugin>();
+    final android = _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
 
-  // 4. Request Permissions & Create Channel
-  if (android != null) {
-    // Note: This requests the 'POST_NOTIFICATIONS' permission on Android 13+
-    await android.requestNotificationsPermission();
-
-    await android.createNotificationChannel(
-      const AndroidNotificationChannel(
-        _channelId,
-        _channelName,
-        description: 'Reminders for pet birthdays, medications, vet visits, and more.',
-        importance: Importance.max,
-      ),
-    );
+    if (android != null) {
+      await android.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _channelId,
+          _channelName,
+          description:
+              'Reminders for pet birthdays, medications, vet visits, and more.',
+          importance: Importance.max,
+        ),
+      );
+    }
   }
-}
 
+  // ─── Request permission (call this when user toggles on) ─────────────────
+  static Future<bool> requestPermission() async {
+    if (kIsWeb) return false;
+    final android = _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) return false;
+    final granted = await android.requestNotificationsPermission();
+    return granted ?? false;
+  }
+
+  // ─── Check if allowed ─────────────────────────────────────────────────────
   static Future<bool> isAllowed() async {
     if (kIsWeb) return false;
-    final android = _notifications.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final android = _notifications
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
     if (android == null) return false;
-    
-    // Checks if the user has granted the notification permission
     return await android.areNotificationsEnabled() ?? false;
   }
+
   // ─── Cancel ───────────────────────────────────────────────────────────────
   static Future<void> cancelAll() async {
     if (kIsWeb) return;
@@ -93,7 +99,7 @@ static Future<void> init() async {
           scheduleTime.minute,
         );
       } else {
-        return;
+        return; // Past one-time notification — skip
       }
     }
 
@@ -141,12 +147,7 @@ static Future<void> init() async {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PUBLIC: Test notifications (fires immediately)
-  // ─────────────────────────────────────────────────────────────────────────
-
-  /// Fires a real upcoming medication record notification immediately.
-  /// Falls back to sample data if no upcoming records exist.
+  // ─── Test notifications ───────────────────────────────────────────────────
   static Future<void> testMedicationReminder({
     String petName = 'Buddy',
     String medName = 'Amoxicillin',
@@ -157,9 +158,7 @@ static Future<void> init() async {
         body: "Time to give $petName their $medName. Don't skip a dose!",
       );
 
-  static Future<void> testVetVisitReminder({
-    String petName = 'Luna',
-  }) =>
+  static Future<void> testVetVisitReminder({String petName = 'Luna'}) =>
       _showNow(
         id: 9002,
         title: '🏥 Vet Visit Tomorrow — $petName',
@@ -167,9 +166,7 @@ static Future<void> init() async {
             "$petName's vet appointment is tomorrow. Prepare any questions and bring their records.",
       );
 
-  static Future<void> testBirthdayReminder({
-    String petName = 'Mochi',
-  }) =>
+  static Future<void> testBirthdayReminder({String petName = 'Mochi'}) =>
       _showNow(
         id: 9003,
         title: '🎂 Happy Birthday, $petName!',
@@ -177,7 +174,6 @@ static Future<void> init() async {
             "Today is $petName's special day! Give them extra love and maybe a treat. 🐾",
       );
 
-  /// Fire an immediate overdue alert summarising all overdue records.
   static Future<void> showOverdueAlert({
     required int overdueCount,
     required List<String> petNames,
@@ -186,16 +182,15 @@ static Future<void> init() async {
     final names = petNames.toSet().join(', ');
     await _showNow(
       id: 9999,
-      title: '⚠️ $overdueCount overdue record${overdueCount > 1 ? 's' : ''}',
+      title:
+          '⚠️ $overdueCount overdue record${overdueCount > 1 ? 's' : ''}',
       body: overdueCount == 1
           ? 'You have 1 overdue record for $names. Tap to review.'
           : 'You have $overdueCount overdue records across: $names. Tap to review.',
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PUBLIC: Schedule from a PetRecord
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─── Schedule from a PetRecord ────────────────────────────────────────────
   static Future<void> scheduleForRecord(PetRecord record) async {
     if (kIsWeb) return;
     final reminder = record.reminderDate;
@@ -210,6 +205,7 @@ static Future<void> init() async {
       scheduledDate: reminder,
     );
 
+    // Schedule end-of-medication reminder
     final endDate = record.medicationEndDate;
     if (endDate != null) {
       final endReminder =
@@ -224,9 +220,7 @@ static Future<void> init() async {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PUBLIC: Schedule annual birthday reminder
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─── Schedule annual birthday reminder ───────────────────────────────────
   static Future<void> scheduleBirthday(Pet pet) async {
     if (kIsWeb) return;
     final dob = pet.birthDateTime;
@@ -245,9 +239,7 @@ static Future<void> init() async {
     );
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PUBLIC: Cancel all notifications tied to a record
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─── Cancel all notifications for a record ────────────────────────────────
   static Future<void> cancelForRecord(PetRecord record) async {
     await cancel(record.notificationId);
     if (record.category == 'Medication') {
@@ -255,9 +247,7 @@ static Future<void> init() async {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PRIVATE: Build title + body per category
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─── Build title + body per category ─────────────────────────────────────
   static _Msg _buildMessage(PetRecord r) {
     final name  = r.petName;
     final title = r.title;
@@ -266,7 +256,7 @@ static Future<void> init() async {
       case 'Medication':
         return _Msg(
           title: '💊 Medication reminder — $name',
-          body:  "Time to give $name their $title. Don't skip a dose!",
+          body: "Time to give $name their $title. Don't skip a dose!",
         );
       case 'Vaccination':
         return _Msg(
@@ -295,7 +285,7 @@ static Future<void> init() async {
       default:
         return _Msg(
           title: '🐾 Reminder for $name',
-          body:  'You have an upcoming $title for $name.',
+          body: 'You have an upcoming $title for $name.',
         );
     }
   }
