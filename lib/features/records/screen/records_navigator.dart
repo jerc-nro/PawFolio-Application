@@ -103,7 +103,6 @@ class RecordNavigationHelper {
       final name = pet.name;
       final type = pet.type;
 
-      // Fired after a successful save inside any add dialog.
       void onSaved(String label) {
         if (popToHomeOnSave) {
           Navigator.of(context).popUntil((route) => route.isFirst);
@@ -117,7 +116,6 @@ class RecordNavigationHelper {
         );
       }
 
-      // Cancel: used by dialogs that need a back-to-home button.
       void onCancel() {
         if (popToHomeOnSave) {
           Navigator.of(context).popUntil((route) => route.isFirst);
@@ -151,6 +149,7 @@ class RecordNavigationHelper {
           showAddWeightDialog(
             context,
             pid,
+            name, // ✅ petName now passed
             onSaved: () => onSaved('Weight'),
             popToHomeOnSave: popToHomeOnSave,
           );

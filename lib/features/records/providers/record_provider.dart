@@ -77,6 +77,7 @@ class RecordController extends AutoDisposeAsyncNotifier<void> {
     required String unit,
     required String dateString,
     required DateTime recordedDate,
+    bool forceUpdateCurrent = false,
   }) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
@@ -87,28 +88,37 @@ class RecordController extends AutoDisposeAsyncNotifier<void> {
           .collection('users').doc(uid)
           .collection('pets').doc(petId);
 
-      final historyRef = petRef.collection('weight_history').doc();
+      final historyCollection = petRef.collection('weight_history');
+      final newDocRef = historyCollection.doc();
       final batch = FirebaseFirestore.instance.batch();
 
       final normalizedDate = DateTime(
         recordedDate.year, recordedDate.month, recordedDate.day,
       );
 
-      batch.set(historyRef, {
+      if (forceUpdateCurrent) {
+        // Un-mark all previous current entries
+        final previousCurrent = await historyCollection
+            .where('is_current', isEqualTo: true)
+            .get();
+        for (final doc in previousCurrent.docs) {
+          batch.update(doc.reference, {'is_current': false});
+        }
+      }
+
+      // Always log to weight_history
+      batch.set(newDocRef, {
         'weight': weight,
         'unit': unit,
         'date_string': dateString,
         'recordedDate': Timestamp.fromDate(normalizedDate),
         'createdAt': FieldValue.serverTimestamp(),
         'is_archived': false,
+        'is_current': forceUpdateCurrent, // ✅ stored in Firestore
       });
 
-      final now = DateTime.now();
-      final isToday = normalizedDate.year == now.year &&
-          normalizedDate.month == now.month &&
-          normalizedDate.day == now.day;
-
-      if (isToday) {
+      // Only update pet doc if user toggled "set as current"
+      if (forceUpdateCurrent) {
         batch.update(petRef, {
           'weight': weight,
           'weightUnit': unit,
@@ -121,12 +131,10 @@ class RecordController extends AutoDisposeAsyncNotifier<void> {
   }
 
   // ── Update pet's current weight from any dialog ───────────────────────────
-  /// Stores [weightKg] (always in kg) as the pet's current weight and
-  /// optionally appends a weight_history entry dated today.
   Future<void> updatePetWeight({
     required String petId,
     required double weightKg,
-    required String dateString,  // dd.MM.yyyy of today
+    required String dateString,
   }) async {
     final uid = ref.read(authProvider).user?.userID;
     if (uid == null) throw Exception('User not authenticated');
@@ -135,28 +143,35 @@ class RecordController extends AutoDisposeAsyncNotifier<void> {
         .collection('users').doc(uid)
         .collection('pets').doc(petId);
 
-    final historyRef = petRef.collection('weight_history').doc();
+    final historyCollection = petRef.collection('weight_history');
+    final newDocRef = historyCollection.doc();
     final now = DateTime.now();
-    final normalizedDate =
-        DateTime(now.year, now.month, now.day);
+    final normalizedDate = DateTime(now.year, now.month, now.day);
 
     final batch = FirebaseFirestore.instance.batch();
 
-    // Update the pet document
+    // Un-mark previous current
+    final previousCurrent = await historyCollection
+        .where('is_current', isEqualTo: true)
+        .get();
+    for (final doc in previousCurrent.docs) {
+      batch.update(doc.reference, {'is_current': false});
+    }
+
     batch.update(petRef, {
       'weight': weightKg,
       'weightUnit': 'kg',
       'lastWeighedDate': dateString,
     });
 
-    // Append to weight history
-    batch.set(historyRef, {
+    batch.set(newDocRef, {
       'weight': weightKg,
       'unit': 'kg',
       'date_string': dateString,
       'recordedDate': Timestamp.fromDate(normalizedDate),
       'createdAt': FieldValue.serverTimestamp(),
       'is_archived': false,
+      'is_current': true,
     });
 
     await batch.commit();
@@ -175,7 +190,7 @@ class RecordController extends AutoDisposeAsyncNotifier<void> {
           .collection('users').doc(uid)
           .collection('pets').doc(petId)
           .collection('weight_history').doc(recordId)
-          .update({'is_archived': true});
+          .update({'is_archived': true, 'is_current': false});
     });
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../providers/record_provider.dart';
@@ -14,7 +15,7 @@ void showAddGroomingDialog(
   String petName,
   String petType, {
   void Function(String label)? onSaved,
-  VoidCallback? onCancel, // ← NEW: back-to-home cancel
+  VoidCallback? onCancel,
 }) {
   showDialog(
     context: context,
@@ -90,22 +91,17 @@ class _GS extends ConsumerState<_GroomContent> {
     if (v.trim().isEmpty) return 'Date is required';
     final d = _parseDate(v);
     if (d == null) return 'Invalid date format';
-    if (_status == 'COMPLETED' && d.isAfter(DateTime.now())) {
+    if (_status == 'COMPLETED' && d.isAfter(DateTime.now()))
       return 'Past/present date required for Completed';
-    }
-    if (_status == 'UPCOMING' && d.isBefore(DateTime.now().subtract(const Duration(days: 1)))) {
+    if (_status == 'UPCOMING' &&
+        d.isBefore(DateTime.now().subtract(const Duration(days: 1))))
       return 'Future date required for Upcoming';
-    }
     return null;
   }
 
   void _handleCancel() {
-    if (widget.onCancel != null) {
-      Navigator.of(context).pop();
-      widget.onCancel!();
-    } else {
-      Navigator.of(context).pop();
-    }
+    Navigator.of(context).pop();
+    widget.onCancel?.call();
   }
 
   Future<void> _save() async {
@@ -144,6 +140,7 @@ class _GS extends ConsumerState<_GroomContent> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+    
   }
 
   Widget _lbl(String t) => Padding(
@@ -184,7 +181,7 @@ class _GS extends ConsumerState<_GroomContent> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ── Title ─────────────────────────────────────────
+            // ── Header ────────────────────────────────────
             Row(children: [
               Container(
                 padding: const EdgeInsets.all(8),
@@ -217,7 +214,6 @@ class _GS extends ConsumerState<_GroomContent> {
                 ),
             ]),
             const SizedBox(height: 12),
-
             _PetNameBanner(petName: widget.petName),
             const SizedBox(height: 16),
 
@@ -225,6 +221,9 @@ class _GS extends ConsumerState<_GroomContent> {
             TextField(
                 controller: _clinic,
                 maxLength: 100,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]')),
+                ],
                 onChanged: (_) => setState(() => _clinicErr = null),
                 decoration:
                     _deco(hint: 'e.g. Paws & Claws', err: _clinicErr != null)),
@@ -232,8 +231,7 @@ class _GS extends ConsumerState<_GroomContent> {
               Padding(
                   padding: const EdgeInsets.only(top: 3),
                   child: Text(_clinicErr!,
-                      style:
-                          const TextStyle(color: Colors.red, fontSize: 11))),
+                      style: const TextStyle(color: Colors.red, fontSize: 11))),
             const SizedBox(height: 14),
 
             _lbl('Date of Service'),
@@ -282,8 +280,7 @@ class _GS extends ConsumerState<_GroomContent> {
               Padding(
                   padding: const EdgeInsets.only(top: 3),
                   child: Text(_dateErr!,
-                      style:
-                          const TextStyle(color: Colors.red, fontSize: 11))),
+                      style: const TextStyle(color: Colors.red, fontSize: 11))),
             const SizedBox(height: 14),
 
             _lbl('Type of Grooming'),
@@ -350,46 +347,41 @@ class _GS extends ConsumerState<_GroomContent> {
                 ]),
             const SizedBox(height: 24),
 
+            // ── Actions ───────────────────────────────────
             Row(children: [
               if (widget.onCancel != null) ...[
                 Expanded(
-                  child: GestureDetector(
-                    onTap: _saving ? null : _handleCancel,
-                    child: Container(
-                      height: 48,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                          color: RecordsPalette.sageLite,
-                          borderRadius: BorderRadius.circular(12)),
-                      child: const Text('Cancel',
-                          style: TextStyle(
-                              color: RecordsPalette.muted,
-                              fontWeight: FontWeight.w600)),
-                    ),
+                  child: OutlinedButton(
+                    onPressed: _saving ? null : _handleCancel,
+                    style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        side: BorderSide(color: RecordsPalette.linenDeep),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12))),
+                    child: const Text('Cancel',
+                        style: TextStyle(
+                            color: RecordsPalette.muted,
+                            fontWeight: FontWeight.w600)),
                   ),
                 ),
                 const SizedBox(width: 10),
               ],
               Expanded(
-                child: SizedBox(
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: _saving ? null : _save,
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: RecordsPalette.steel,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12))),
-                    child: _saving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2))
-                        : const Text('SAVE GROOMING',
-                            style:
-                                TextStyle(fontWeight: FontWeight.bold)),
-                  ),
+                child: ElevatedButton(
+                  onPressed: _saving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      backgroundColor: RecordsPalette.steel,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12))),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 20, height: 20,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2))
+                      : const Text('SAVE GROOMING',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
             ]),

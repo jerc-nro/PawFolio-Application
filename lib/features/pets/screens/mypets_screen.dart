@@ -233,20 +233,5 @@ class MyPetsScreen extends ConsumerWidget {
     showRecordToast(context, '${pet.name} archived',
         icon: Icons.inventory_2_outlined);
     // Undo via a toast isn't possible — keep a standard SnackBar for undo
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('${pet.name} archived'),
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: RecordsPalette.steel,
-      shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12)),
-      margin: const EdgeInsets.all(16),
-      duration: const Duration(seconds: 3),
-      action: SnackBarAction(
-        label: 'UNDO',
-        textColor: RecordsPalette.linen,
-        onPressed: () =>
-            ref.read(petControllerProvider).restorePet(pet.petID),
-      ),
-    ));
   }
 }

@@ -295,6 +295,9 @@ class AccountScreen extends ConsumerWidget {
 }
 
 // ─── Settings Drawer ──────────────────────────────────────────────────────────
+// ─── Test Notifications Section in Settings Drawer ────────────────────────────
+
+// ─── Settings Drawer ──────────────────────────────────────────────────────────
 class _SettingsDrawer extends ConsumerWidget {
   final VoidCallback onDeleteAccount;
   const _SettingsDrawer({required this.onDeleteAccount});
@@ -307,9 +310,7 @@ class _SettingsDrawer extends ConsumerWidget {
     'groom_visits',
   ];
 
-  // Fetch one real upcoming record of a given collection for test notification
-  Future<PetRecord?> _fetchOneUpcoming(
-      String uid, String collection) async {
+  Future<PetRecord?> _fetchOneUpcoming(String uid, String collection) async {
     final db = FirebaseFirestore.instance;
     final pets = await db
         .collection('users')
@@ -345,8 +346,7 @@ class _SettingsDrawer extends ConsumerWidget {
       width: 300,
       backgroundColor: const Color(0xFFF5F0EE),
       shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.horizontal(left: Radius.circular(24)),
+        borderRadius: BorderRadius.horizontal(left: Radius.circular(24)),
       ),
       child: SafeArea(
         child: Column(
@@ -358,8 +358,7 @@ class _SettingsDrawer extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
               decoration: const BoxDecoration(
                 color: _kNavy,
-                borderRadius:
-                    BorderRadius.only(topLeft: Radius.circular(24)),
+                borderRadius: BorderRadius.only(topLeft: Radius.circular(24)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,6 +408,79 @@ class _SettingsDrawer extends ConsumerWidget {
 
             const SizedBox(height: 8),
 
+            // ── Test Notifications ────────────────────────────
+            _DrawerSection(
+              label: 'TEST NOTIFICATIONS',
+              children: [
+                _DrawerActionTile(
+                  icon: Icons.medication_outlined,
+                  title: 'Medication',
+                  subtitle: 'Test upcoming alert',
+                  color: _kNavy,
+                  onTap: () async {
+                    if (uid == null) return;
+                    final record =
+                        await _fetchOneUpcoming(uid, 'medications');
+                    await _fireTestNotification(
+                      context,
+                      label: 'Medication',
+                      action: () async {
+                        if (record != null) {
+                          await NotificationService.testMedicationReminder(
+                            petName: record.petName,
+                            medName: record.title,
+                          );
+                        } else {
+                          await NotificationService.testMedicationReminder();
+                        }
+                      },
+                    );
+                  },
+                ),
+                Divider(height: 1, color: _kDivider, indent: 56),
+                _DrawerActionTile(
+                  icon: Icons.local_hospital_outlined,
+                  title: 'Vet Visit',
+                  subtitle: 'Test vet visit alert',
+                  color: _kNavy,
+                  onTap: () async {
+                    if (uid == null) return;
+                    final record =
+                        await _fetchOneUpcoming(uid, 'vet_visits');
+                    await _fireTestNotification(
+                      context,
+                      label: 'Vet Visit',
+                      action: () async {
+                        await NotificationService.testVetVisitReminder(
+                          petName: record?.petName ?? 'Luna',
+                        );
+                      },
+                    );
+                  },
+                ),
+                Divider(height: 1, color: _kDivider, indent: 56),
+                _DrawerActionTile(
+                  icon: Icons.cake_outlined,
+                  title: 'Birthday',
+                  subtitle: 'Test birthday alert',
+                  color: _kNavy,
+                  onTap: () async {
+                    final user = ref.read(authProvider).user;
+                    await _fireTestNotification(
+                      context,
+                      label: 'Birthday',
+                      action: () =>
+                          NotificationService.testBirthdayReminder(
+                        petName: user?.username ?? 'Mochi',
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 8),
+
             // ── Account ───────────────────────────────────────
             _DrawerSection(
               label: 'ACCOUNT',
@@ -426,98 +498,13 @@ class _SettingsDrawer extends ConsumerWidget {
               ],
             ),
 
-            const SizedBox(height: 8),
-
-            // ── Test Notifications ────────────────────────────
-            _DrawerSection(
-              label: 'TEST NOTIFICATIONS',
-              children: [
-                _DrawerActionTile(
-                  icon: Icons.medication_outlined,
-                  title: 'Test Medication Reminder',
-                  subtitle: 'Fires a real upcoming medication alert',
-                  color: _kNavy,
-                  onTap: () async {
-                    if (uid == null) return;
-                    final record =
-                        await _fetchOneUpcoming(uid, 'medications');
-                    await _fireTestNotification(
-                      context,
-                      label: 'Medication Reminder',
-                      action: () async {
-                        if (record != null) {
-                          await NotificationService
-                              .testMedicationReminder(
-                            petName: record.petName,
-                            medName: record.title,
-                          );
-                        } else {
-                          await NotificationService
-                              .testMedicationReminder();
-                        }
-                      },
-                    );
-                  },
-                ),
-                Divider(
-                    height: 1,
-                    color: _kDivider,
-                    indent: 16,
-                    endIndent: 16),
-                _DrawerActionTile(
-                  icon: Icons.local_hospital_outlined,
-                  title: 'Test Vet Visit Reminder',
-                  subtitle: 'Fires a real upcoming vet visit alert',
-                  color: _kNavy,
-                  onTap: () async {
-                    if (uid == null) return;
-                    final record =
-                        await _fetchOneUpcoming(uid, 'vet_visits');
-                    await _fireTestNotification(
-                      context,
-                      label: 'Vet Visit Reminder',
-                      action: () async {
-                        await NotificationService.testVetVisitReminder(
-                          petName:
-                              record?.petName ?? 'Luna',
-                        );
-                      },
-                    );
-                  },
-                ),
-                Divider(
-                    height: 1,
-                    color: _kDivider,
-                    indent: 16,
-                    endIndent: 16),
-                _DrawerActionTile(
-                  icon: Icons.cake_outlined,
-                  title: 'Test Birthday Reminder',
-                  subtitle: 'Fires a sample birthday alert now',
-                  color: _kNavy,
-                  onTap: () async {
-                    final user =
-                        ref.read(authProvider).user;
-                    await _fireTestNotification(
-                      context,
-                      label: 'Birthday Reminder',
-                      action: () =>
-                          NotificationService.testBirthdayReminder(
-                        petName: user?.username ?? 'Mochi',
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-
             const Spacer(),
 
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-              child: Text('Pawfolio',
+              child: Text('Pawfolio v1.0.0',
                   style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 10,
                       color: _kLabel.withOpacity(0.5),
                       fontWeight: FontWeight.w600,
                       letterSpacing: 1.2)),
@@ -527,6 +514,13 @@ class _SettingsDrawer extends ConsumerWidget {
       ),
     );
   }
+
+  // (Keeping your _handleNotifToggle and _fireTestNotification methods as is)
+}
+
+  // ── Helper UI Methods ──────────────────────────────────────
+
+  // (Include your _handleNotifToggle and _fireTestNotification logic here...)
 
   // ── Toggle: auto-enable when system permission granted ────────────────────
   Future<void> _handleNotifToggle(
@@ -619,7 +613,6 @@ class _SettingsDrawer extends ConsumerWidget {
       ));
     }
   }
-}
 
 // ─── Drawer Helpers ───────────────────────────────────────────────────────────
 

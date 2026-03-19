@@ -102,10 +102,8 @@ extension _ChartFilterExt on _ChartFilter {
     return switch (this) {
       _ChartFilter.day   => DateTime(now.year, now.month, now.day),
       _ChartFilter.week  => now.subtract(const Duration(days: 7)),
-      _ChartFilter.month =>
-        DateTime(now.year, now.month - 1, now.day),
-      _ChartFilter.year  =>
-        DateTime(now.year - 1, now.month, now.day),
+      _ChartFilter.month => DateTime(now.year, now.month - 1, now.day),
+      _ChartFilter.year  => DateTime(now.year - 1, now.month, now.day),
     };
   }
 
@@ -124,12 +122,10 @@ class WeightHistoryView extends ConsumerStatefulWidget {
   const WeightHistoryView({super.key, required this.pet});
 
   @override
-  ConsumerState<WeightHistoryView> createState() =>
-      _WeightHistoryViewState();
+  ConsumerState<WeightHistoryView> createState() => _WeightHistoryViewState();
 }
 
-class _WeightHistoryViewState
-    extends ConsumerState<WeightHistoryView> {
+class _WeightHistoryViewState extends ConsumerState<WeightHistoryView> {
   _ChartFilter _filter  = _ChartFilter.month;
   bool         _showLbs = false;
 
@@ -150,8 +146,7 @@ class _WeightHistoryViewState
             width: double.infinity,
             decoration: const BoxDecoration(
               color: _listBg,
-              borderRadius:
-                  BorderRadius.vertical(top: Radius.circular(32)),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
             ),
             child: _buildStream(context, uid),
           ),
@@ -165,9 +160,6 @@ class _WeightHistoryViewState
   Widget _buildStream(BuildContext ctx, String? uid) {
     if (uid == null) return const Center(child: Text('Login Required'));
 
-    // Weight history uses 'recordedDate' — no composite index needed,
-    // no status filter, simple single-field orderBy.
-    // Client-side filter removes archived docs.
     final stream = FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
@@ -189,7 +181,6 @@ class _WeightHistoryViewState
         }
         if (!snap.hasData) return _emptyState(ctx);
 
-        // Filter out archived client-side
         final docs = snap.data!.docs.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
           return data['is_archived'] != true;
@@ -201,50 +192,24 @@ class _WeightHistoryViewState
     );
   }
 
-  Widget _buildContent(
-      BuildContext ctx, List<QueryDocumentSnapshot> docs) {
-    // Determine current (latest) entry
-    QueryDocumentSnapshot? currentDoc;
-    DateTime? maxDate;
-    DateTime? maxCreatedAt;
-
-    DateTime getCreatedAt(QueryDocumentSnapshot d) {
-      final raw = (d.data() as Map<String, dynamic>)['createdAt'];
-      if (raw is Timestamp) return raw.toDate();
-      return DateTime.fromMillisecondsSinceEpoch(0);
-    }
-
+  Widget _buildContent(BuildContext ctx, List<QueryDocumentSnapshot> docs) {
+    // ✅ Use is_current field from Firestore — do NOT compute by date
+    String? currentDocId;
     for (final doc in docs) {
-      final date      = _parseDateForSort(doc);
-      final createdAt = getCreatedAt(doc);
-      if (currentDoc == null) {
-        currentDoc    = doc;
-        maxDate       = date;
-        maxCreatedAt  = createdAt;
-        continue;
-      }
-      final isLater      = date.isAfter(maxDate!);
-      final isSameDate   = date.isAtSameMomentAs(maxDate);
-      final isNewerWrite =
-          isSameDate && createdAt.isAfter(maxCreatedAt!);
-      final isNewerDocId = isSameDate &&
-          createdAt.isAtSameMomentAs(maxCreatedAt!) &&
-          doc.id.compareTo(currentDoc.id) > 0;
-      if (isLater || isNewerWrite || isNewerDocId) {
-        currentDoc   = doc;
-        maxDate      = date;
-        maxCreatedAt = createdAt;
+      final data = doc.data() as Map<String, dynamic>;
+      if (data['is_current'] == true) {
+        currentDocId = doc.id;
+        break;
       }
     }
-    final currentDocId = currentDoc?.id;
 
-    // Sort: current first, then descending
+    // Sort: current first, then descending by date
     final sortedDocs = List<QueryDocumentSnapshot>.from(docs);
     sortedDocs.sort((a, b) {
       if (a.id == currentDocId) return -1;
       if (b.id == currentDocId) return 1;
-      final dateA   = _parseDateForSort(a);
-      final dateB   = _parseDateForSort(b);
+      final dateA = _parseDateForSort(a);
+      final dateB = _parseDateForSort(b);
       final dateCmp = dateB.compareTo(dateA);
       if (dateCmp != 0) return dateCmp;
       final caA = (a.data() as Map)['createdAt'];
@@ -259,22 +224,20 @@ class _WeightHistoryViewState
     });
 
     // Chart docs filtered by period
-    final cutoff    = _filter.cutoff;
+    final cutoff = _filter.cutoff;
     final chartDocs = docs
         .where((doc) {
           final d = _parseDateForSort(doc);
           return d.isAfter(cutoff) || d.isAtSameMomentAs(cutoff);
         })
         .toList()
-      ..sort((a, b) =>
-          _parseDateForSort(a).compareTo(_parseDateForSort(b)));
+      ..sort((a, b) => _parseDateForSort(a).compareTo(_parseDateForSort(b)));
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
       children: [
         _unitToggle(),
         const SizedBox(height: 16),
-
         if (sortedDocs.length >= 2) ...[
           _buildChartSection(chartDocs),
           const SizedBox(height: 24),
@@ -286,12 +249,9 @@ class _WeightHistoryViewState
           final doc   = e.value;
           double? prevWeight;
           if (sortedDocs.length > 1) {
-            final pi = index + 1 < sortedDocs.length
-                ? index + 1
-                : null;
+            final pi = index + 1 < sortedDocs.length ? index + 1 : null;
             if (pi != null) {
-              final pd =
-                  sortedDocs[pi].data() as Map<String, dynamic>;
+              final pd = sortedDocs[pi].data() as Map<String, dynamic>;
               prevWeight = (pd['weight'] as num?)?.toDouble();
             }
           }
@@ -345,9 +305,7 @@ class _WeightHistoryViewState
               style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: selected
-                      ? Colors.white
-                      : Colors.grey.shade500)),
+                  color: selected ? Colors.white : Colors.grey.shade500)),
         ),
       );
 
@@ -393,16 +351,13 @@ class _WeightHistoryViewState
                   const SizedBox(width: 8),
                   Text('Not enough data for this period.',
                       style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade400)),
+                          fontSize: 12, color: Colors.grey.shade400)),
                 ]),
               )
             else
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 0, 16, 16),
-                child: SizedBox(
-                    height: 180,
-                    child: _buildChart(chartDocs)),
+                child: SizedBox(height: 180, child: _buildChart(chartDocs)),
               ),
           ],
         ),
@@ -416,22 +371,17 @@ class _WeightHistoryViewState
       final data    = docsAsc[i].data() as Map<String, dynamic>;
       final rawKg   = (data['weight'] as num?)?.toDouble() ?? 0.0;
       final display = _toDisplay(rawKg, _showLbs);
-      spots.add(FlSpot(
-          i.toDouble(),
-          double.parse(display.toStringAsFixed(2))));
-      dateLabels[i] =
-          _filter.dateFormat(_parseDateForSort(docsAsc[i]));
+      spots.add(FlSpot(i.toDouble(), double.parse(display.toStringAsFixed(2))));
+      dateLabels[i] = _filter.dateFormat(_parseDateForSort(docsAsc[i]));
     }
 
-    final weights   = spots.map((s) => s.y).toList();
+    final weights = spots.map((s) => s.y).toList();
     final minY = (weights.reduce((a, b) => a < b ? a : b) -
             (_showLbs ? 2.0 : 1.0))
         .clamp(0.0, double.infinity);
     final maxY =
-        weights.reduce((a, b) => a > b ? a : b) +
-            (_showLbs ? 2.0 : 1.0);
-    final showEvery =
-        (spots.length / 4).ceil().clamp(1, spots.length);
+        weights.reduce((a, b) => a > b ? a : b) + (_showLbs ? 2.0 : 1.0);
+    final showEvery = (spots.length / 4).ceil().clamp(1, spots.length);
 
     return LineChart(LineChartData(
       minY: minY,
@@ -441,22 +391,19 @@ class _WeightHistoryViewState
         show: true,
         drawVerticalLine: false,
         horizontalInterval: (maxY - minY) / 3,
-        getDrawingHorizontalLine: (_) => FlLine(
-            color: Colors.grey.withOpacity(0.12), strokeWidth: 1),
+        getDrawingHorizontalLine: (_) =>
+            FlLine(color: Colors.grey.withOpacity(0.12), strokeWidth: 1),
       ),
       titlesData: FlTitlesData(
-        topTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false)),
-        rightTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false)),
+        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         leftTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
             reservedSize: 46,
             getTitlesWidget: (val, _) => Text(
               '${val.toStringAsFixed(1)}${_showLbs ? 'lbs' : 'kg'}',
-              style: TextStyle(
-                  fontSize: 9, color: Colors.grey.shade500),
+              style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
             ),
           ),
         ),
@@ -467,15 +414,11 @@ class _WeightHistoryViewState
             interval: showEvery.toDouble(),
             getTitlesWidget: (val, _) {
               final idx = val.toInt();
-              if (!dateLabels.containsKey(idx)) {
-                return const SizedBox.shrink();
-              }
+              if (!dateLabels.containsKey(idx)) return const SizedBox.shrink();
               return Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(dateLabels[idx]!,
-                    style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey.shade500)),
+                    style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
               );
             },
           ),
@@ -506,10 +449,7 @@ class _WeightHistoryViewState
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [
-                _slate.withOpacity(0.18),
-                _slate.withOpacity(0.0),
-              ],
+              colors: [_slate.withOpacity(0.18), _slate.withOpacity(0.0)],
             ),
           ),
         ),
@@ -547,20 +487,16 @@ class _WeightHistoryViewState
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-            horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(children: [
           Container(
             width: 48, height: 48,
             decoration: BoxDecoration(
-              color: isCurrent
-                  ? _slate
-                  : _slate.withOpacity(0.08),
+              color: isCurrent ? _slate : _slate.withOpacity(0.08),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(Icons.monitor_weight_outlined,
-                color: isCurrent ? Colors.white : _slate,
-                size: 24),
+                color: isCurrent ? Colors.white : _slate, size: 24),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -589,21 +525,17 @@ class _WeightHistoryViewState
                   style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: isCurrent
-                          ? _todayAccent
-                          : Colors.black87),
+                      color: isCurrent ? _todayAccent : Colors.black87),
                 ),
                 if (_showLbs && storedUnit.toLowerCase() == 'kg')
                   Text('${rawKg.toStringAsFixed(1)} kg stored',
                       style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey.shade400)),
+                          fontSize: 10, color: Colors.grey.shade400)),
                 const SizedBox(height: 4),
                 Row(children: [
                   Text(dateString,
                       style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade500)),
+                          fontSize: 12, color: Colors.grey.shade500)),
                   if (prevWeight != null) ...[
                     const SizedBox(width: 8),
                     Container(
@@ -611,13 +543,9 @@ class _WeightHistoryViewState
                           horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                           color: trend.bgColor,
-                          borderRadius:
-                              BorderRadius.circular(6)),
-                      child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                        Icon(trend.icon,
-                            size: 10, color: trend.color),
+                          borderRadius: BorderRadius.circular(6)),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(trend.icon, size: 10, color: trend.color),
                         const SizedBox(width: 3),
                         Text(trend.label,
                             style: TextStyle(
@@ -633,8 +561,7 @@ class _WeightHistoryViewState
           ),
           if (isCurrent)
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Icon(Icons.lock_outline,
                   color: Colors.grey.shade400, size: 20),
             )
@@ -657,8 +584,7 @@ class _WeightHistoryViewState
     final confirmed = await showDialog<bool>(
       context: ctx,
       builder: (c) => AlertDialog(
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Delete Entry?'),
         content: const Text(
             'This weight entry will be permanently deleted. This cannot be undone.'),
@@ -668,8 +594,7 @@ class _WeightHistoryViewState
               child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(c, true),
-            child: const Text('Delete',
-                style: TextStyle(color: Colors.red)),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -677,8 +602,7 @@ class _WeightHistoryViewState
     if (confirmed == true) {
       await ref
           .read(recordControllerProvider.notifier)
-          .deleteWeightRecord(
-              petId: widget.pet.petID, recordId: doc.id);
+          .deleteWeightRecord(petId: widget.pet.petID, recordId: doc.id);
     }
   }
 
@@ -699,7 +623,7 @@ class _WeightHistoryViewState
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () =>
-                  showAddWeightDialog(ctx, widget.pet.petID),
+                  showAddWeightDialog(ctx, widget.pet.petID, widget.pet.name),
               icon: const Icon(Icons.add, size: 18),
               label: const Text('LOG FIRST WEIGHT'),
               style: ElevatedButton.styleFrom(
@@ -716,19 +640,17 @@ class _WeightHistoryViewState
 
   Widget _header(BuildContext ctx) => SafeArea(
         child: Padding(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
           child: Row(
             children: [
-              // Back button
               IconButton(
                 onPressed: () => Navigator.pop(ctx),
                 icon: const CircleAvatar(
-                    backgroundColor: _slate, radius: 18,
+                    backgroundColor: _slate,
+                    radius: 18,
                     child: Icon(Icons.arrow_back,
                         color: Colors.white, size: 18)),
               ),
-              // Title centered
               const Expanded(
                 child: Text('WEIGHT HISTORY',
                     textAlign: TextAlign.center,
@@ -738,12 +660,12 @@ class _WeightHistoryViewState
                         color: _slate,
                         letterSpacing: 1.5)),
               ),
-              // Home button — same size as back button
               IconButton(
-                onPressed: () => Navigator.of(ctx)
-                    .popUntil((route) => route.isFirst),
+                onPressed: () =>
+                    Navigator.of(ctx).popUntil((route) => route.isFirst),
                 icon: const CircleAvatar(
-                    backgroundColor: _slate, radius: 18,
+                    backgroundColor: _slate,
+                    radius: 18,
                     child: Icon(Icons.home_outlined,
                         color: Colors.white, size: 18)),
               ),
@@ -761,7 +683,7 @@ class _WeightHistoryViewState
         const Spacer(),
         ElevatedButton.icon(
           onPressed: () =>
-              showAddWeightDialog(ctx, widget.pet.petID),
+              showAddWeightDialog(ctx, widget.pet.petID, widget.pet.name),
           icon: const Icon(Icons.add, size: 16),
           label: const Text('LOG WEIGHT',
               style: TextStyle(
@@ -785,8 +707,7 @@ class _WeightHistoryViewState
 class _FilterTabs extends StatelessWidget {
   final _ChartFilter selected;
   final ValueChanged<_ChartFilter> onChanged;
-  const _FilterTabs(
-      {required this.selected, required this.onChanged});
+  const _FilterTabs({required this.selected, required this.onChanged});
 
   static const _slate = Color(0xFF455A64);
 
@@ -806,8 +727,7 @@ class _FilterTabs extends StatelessWidget {
             onTap: () => onChanged(f),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
                 color: isSelected ? _slate : Colors.transparent,
                 borderRadius: BorderRadius.circular(7),
@@ -822,9 +742,7 @@ class _FilterTabs extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color: isSelected
-                          ? Colors.white
-                          : Colors.grey.shade500)),
+                      color: isSelected ? Colors.white : Colors.grey.shade500)),
             ),
           );
         }).toList(),

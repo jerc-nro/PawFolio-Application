@@ -4,7 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../models/pet_model.dart';
 import '../../records/widgets/add_grooming_dialog.dart';
-import '../../records/widgets/status_filter_row.dart';
+import '../../records/widgets/status_filter_row.dart'
+    show StatusFilterRow, statusDisplayLabel, statusColor;
 import '../../auth/providers/auth_provider.dart';
 import '../../records/providers/record_provider.dart';
 import '../../records/widgets/edit_records_dialog.dart';
@@ -171,27 +172,15 @@ class GroomingHistoryView extends ConsumerWidget {
       String? uid, String currentFilter) {
     if (uid == null) return const Center(child: Text("Please log in."));
 
-    // INDEX: date_timestamp DESC, status ASC  → used when filter = ALL
-    // INDEX: is_archived ASC, status ASC, date_timestamp DESC → used when filtered
-    Query query = FirebaseFirestore.instance
+    // Single query — no composite index needed.
+    // is_archived and status are filtered client-side.
+    final Query query = FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
         .collection('pets')
         .doc(pet.petID)
         .collection('groom_visits')
         .orderBy('date_timestamp', descending: true);
-
-    if (currentFilter != "ALL") {
-      query = FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('pets')
-          .doc(pet.petID)
-          .collection('groom_visits')
-          .where('is_archived', isEqualTo: false)
-          .where('status', isEqualTo: currentFilter)
-          .orderBy('date_timestamp', descending: true);
-    }
 
     return StreamBuilder<QuerySnapshot>(
       stream: query.snapshots(),
@@ -206,13 +195,16 @@ class GroomingHistoryView extends ConsumerWidget {
         }
 
         final allDocs = snapshot.data?.docs ?? [];
-        final docs = currentFilter == "ALL"
-            ? allDocs
-                .where((d) =>
-                    (d.data() as Map<String, dynamic>)['is_archived'] !=
-                    true)
-                .toList()
-            : allDocs;
+        // Client-side filtering: exclude archived, apply status filter
+        final docs = allDocs.where((d) {
+          final data = d.data() as Map<String, dynamic>;
+          if (data['is_archived'] == true) return false;
+          if (currentFilter != 'ALL') {
+            final status = (data['status'] ?? '').toString();
+            if (status != currentFilter) return false;
+          }
+          return true;
+        }).toList();
 
         if (docs.isEmpty) {
           return Center(
@@ -249,8 +241,7 @@ class GroomingHistoryView extends ConsumerWidget {
                   extra['provider'] ?? 'Not specified',
               location: data['clinic_name'] ??
                   extra['clinic_name'] ?? '',
-              status: (data['status'] ?? 'UPCOMING')
-                  .toString().toUpperCase(),
+              status: (data['status'] ?? 'Upcoming').toString(),
             );
           },
         );
@@ -265,7 +256,8 @@ class GroomingHistoryView extends ConsumerWidget {
     required String provider, required String location,
     required String status,
   }) {
-    final statusColor = _getStatusColor(status);
+    final badgeColor = statusColor(status);
+    final badgeLabel = statusDisplayLabel(status);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -289,7 +281,7 @@ class GroomingHistoryView extends ConsumerWidget {
                 overflow: TextOverflow.ellipsis),
           ),
           Row(children: [
-            _statusBadge(status, statusColor),
+            _statusBadge(badgeLabel, badgeColor),
             if (!pet.isArchived) ...[
               const SizedBox(width: 4),
               IconButton(
@@ -329,14 +321,6 @@ class GroomingHistoryView extends ConsumerWidget {
     );
   }
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'COMPLETED': return const Color(0xFF388E3C);
-      case 'ONGOING':   return const Color(0xFFD32F2F);
-      case 'UPCOMING':  return const Color(0xFFFFB300);
-      default:          return Colors.grey;
-    }
-  }
 
   Widget _buildHeader(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),

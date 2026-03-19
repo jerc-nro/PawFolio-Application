@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../models/record_model.dart';
@@ -8,7 +9,6 @@ import '../screen/records_navigator.dart';
 import '../theme/records_theme.dart';
 import '_status_date_logic.dart';
 import 'location_selector_widget.dart';
-import 'pet_weight_field.dart';
 
 void showAddVaccinationDialog(
   BuildContext context,
@@ -49,26 +49,33 @@ class _VaccineContent extends ConsumerStatefulWidget {
 }
 
 class _VS extends ConsumerState<_VaccineContent> {
-  final _name   = TextEditingController();
-  final _date   = TextEditingController();
-  final _vet    = TextEditingController();
-  final _dosage = TextEditingController();
-  final _time   = TextEditingController();
+  final _name       = TextEditingController();
+  final _date       = TextEditingController();
+  final _vet        = TextEditingController();
+  final _dosage     = TextEditingController();
+  final _time       = TextEditingController();
+  final _weightCtrl = TextEditingController();
 
-  String    _type   = 'CORE';
-  String    _unit   = 'MG';
-  String    _status = 'UPCOMING';
-  TimeOfDay _tod    = TimeOfDay.now();
-  bool      _saving = false;
-  ClinicLocation? _location;
-  double?   _petWeightKg;
+  String    _type        = 'CORE';
+  String    _unit        = 'MG';
+  String    _weightUnit  = 'kg';
+  String    _status      = 'UPCOMING';
+  TimeOfDay _tod         = TimeOfDay.now();
+  bool      _saving      = false;
   bool      _isCurrentWeight = false;
+  ClinicLocation? _location;
 
   String? _nameErr, _dateErr, _timeErr;
 
+  double? get _weightInKg {
+    final v = double.tryParse(_weightCtrl.text.trim());
+    if (v == null || v <= 0) return null;
+    return _weightUnit == 'lbs' ? v / 2.20462 : v;
+  }
+
   @override
   void dispose() {
-    for (final c in [_name, _date, _vet, _dosage, _time]) c.dispose();
+    for (final c in [_name, _date, _vet, _dosage, _time, _weightCtrl]) c.dispose();
     super.dispose();
   }
 
@@ -137,6 +144,8 @@ class _VS extends ConsumerState<_VaccineContent> {
     setState(() => _saving = true);
     final nav = Navigator.of(context);
     try {
+      final weightKg = _weightInKg;
+
       await ref.read(recordControllerProvider.notifier).addPetRecord(PetRecord(
         id: '', petID: widget.petId, petName: widget.petName,
         petType: widget.petType, category: 'Vaccination',
@@ -148,16 +157,23 @@ class _VS extends ConsumerState<_VaccineContent> {
           'veterinarian': _vet.text.trim(),
           'dosage': _dosage.text.trim().isEmpty ? '' : '${_dosage.text.trim()} $_unit',
           'time': _time.text.trim(),
-          if (_petWeightKg != null) 'pet_weight': _petWeightKg,
+          if (weightKg != null) 'pet_weight': weightKg,
           if (_location != null) 'clinic_location': _location!.display,
         },
       ));
-      if (_petWeightKg != null && _isCurrentWeight) {
-        await ref.read(recordControllerProvider.notifier).updatePetWeight(
-          petId: widget.petId, weightKg: _petWeightKg!,
+
+      // Always log to history; mark as current only if toggled
+      if (weightKg != null) {
+        await ref.read(recordControllerProvider.notifier).addWeightRecord(
+          petId: widget.petId,
+          weight: weightKg,
+          unit: 'kg',
           dateString: DateFormat('dd.MM.yyyy').format(DateTime.now()),
+          recordedDate: DateTime.now(),
+          forceUpdateCurrent: _isCurrentWeight,
         );
       }
+
       if (mounted) { nav.pop(); widget.onSaved?.call('Vaccination'); }
     } catch (e) {
       if (mounted) showRecordToast(context, 'Error: $e', isError: true);
@@ -223,6 +239,8 @@ class _VS extends ConsumerState<_VaccineContent> {
                     borderRadius: BorderRadius.circular(8)),
                 child: const Icon(Icons.close_rounded, size: 16, color: RecordsPalette.ink))),
         ]),
+        const SizedBox(height: 12),
+        _PetNameBanner(petName: widget.petName),
         const SizedBox(height: 16),
 
         _lbl('Vaccine Name'),
@@ -267,7 +285,9 @@ class _VS extends ConsumerState<_VaccineContent> {
         const SizedBox(height: 14),
 
         _lbl('Veterinarian'),
-        TextField(controller: _vet, maxLength: 100, decoration: _deco(hint: 'Dr. Name')),
+        TextField(controller: _vet, maxLength: 100,
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]'))],
+            decoration: _deco(hint: 'Dr. Name')),
         const SizedBox(height: 14),
 
         _lbl('Clinic Location'),
@@ -299,9 +319,20 @@ class _VS extends ConsumerState<_VaccineContent> {
         const SizedBox(height: 14),
 
         _lbl('Pet Weight'),
-        PetWeightField(onChanged: (kg, isCurrent) => setState(() {
-          _petWeightKg = kg; _isCurrentWeight = isCurrent;
-        })),
+        _WeightWithCurrentToggle(
+          controller: _weightCtrl,
+          unit: _weightUnit,
+          isCurrentWeight: _isCurrentWeight,
+          onUnitChanged: (u) {
+            final cur = double.tryParse(_weightCtrl.text.trim());
+            if (cur != null && cur > 0) {
+              _weightCtrl.text = (u == 'lbs' ? cur * 2.20462 : cur / 2.20462).toStringAsFixed(1);
+            }
+            setState(() => _weightUnit = u);
+          },
+          onCurrentToggled: (v) => setState(() => _isCurrentWeight = v),
+          onChanged: () => setState(() {}),
+        ),
         const SizedBox(height: 14),
 
         _lbl('Status'),
@@ -320,24 +351,206 @@ class _VS extends ConsumerState<_VaccineContent> {
 
         Row(children: [
           if (widget.onCancel != null) ...[
-            Expanded(child: GestureDetector(onTap: _saving ? null : _handleCancel,
-              child: Container(height: 48, alignment: Alignment.center,
-                decoration: BoxDecoration(color: RecordsPalette.sageLite,
-                    borderRadius: BorderRadius.circular(12)),
-                child: const Text('Cancel', style: TextStyle(
-                    color: RecordsPalette.muted, fontWeight: FontWeight.w600))))),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _saving ? null : _handleCancel,
+                style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                    side: const BorderSide(color: RecordsPalette.linenDeep),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                child: const Text('Cancel',
+                    style: TextStyle(color: RecordsPalette.muted, fontWeight: FontWeight.w600)),
+              ),
+            ),
             const SizedBox(width: 10),
           ],
-          Expanded(child: SizedBox(height: 48,
-            child: ElevatedButton(onPressed: _saving ? null : _save,
-              style: ElevatedButton.styleFrom(backgroundColor: RecordsPalette.steel,
+          Expanded(
+            child: ElevatedButton(
+              onPressed: _saving ? null : _save,
+              style: ElevatedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                  backgroundColor: RecordsPalette.steel,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
               child: _saving
                   ? const SizedBox(width: 20, height: 20,
                       child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                  : const Text('SAVE VACCINATION', style: TextStyle(fontWeight: FontWeight.bold))))),
+                  : const Text('SAVE VACCINATION', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ),
         ]),
+      ]),
+    );
+  }
+}
+
+// ── Shared weight + current toggle widget ─────────────────────────────────────
+class _WeightWithCurrentToggle extends StatelessWidget {
+  final TextEditingController controller;
+  final String unit;
+  final bool isCurrentWeight;
+  final ValueChanged<String> onUnitChanged;
+  final ValueChanged<bool> onCurrentToggled;
+  final VoidCallback onChanged;
+
+  const _WeightWithCurrentToggle({
+    required this.controller,
+    required this.unit,
+    required this.isCurrentWeight,
+    required this.onUnitChanged,
+    required this.onCurrentToggled,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasValue = controller.text.trim().isNotEmpty;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: TextField(
+              controller: controller,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+              ],
+              onChanged: (_) => onChanged(),
+              style: const TextStyle(fontSize: 13, color: RecordsPalette.ink),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'e.g. 4.5',
+                counterText: '',
+                suffixText: unit,
+                hintStyle: TextStyle(
+                    color: RecordsPalette.muted.withOpacity(0.7), fontSize: 12),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide:
+                        const BorderSide(color: RecordsPalette.linenDeep, width: 1.5)),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide:
+                        const BorderSide(color: RecordsPalette.steel, width: 2)),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEEEEEE),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              _unitBtn('kg', unit, onUnitChanged),
+              const SizedBox(height: 3),
+              _unitBtn('lbs', unit, onUnitChanged),
+            ]),
+          ),
+        ]),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeInOut,
+          child: hasValue
+              ? GestureDetector(
+                  onTap: () => onCurrentToggled(!isCurrentWeight),
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isCurrentWeight
+                          ? RecordsPalette.steel.withOpacity(0.08)
+                          : const Color(0xFFF5F5F5),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isCurrentWeight ? RecordsPalette.steel : RecordsPalette.linenDeep,
+                        width: isCurrentWeight ? 1.5 : 1,
+                      ),
+                    ),
+                    child: Row(children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        width: 18, height: 18,
+                        decoration: BoxDecoration(
+                          color: isCurrentWeight ? RecordsPalette.steel : Colors.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isCurrentWeight ? RecordsPalette.steel : RecordsPalette.linenDeep,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: isCurrentWeight
+                            ? const Icon(Icons.check, size: 11, color: Colors.white)
+                            : null,
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text('Set as current weight',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: RecordsPalette.ink)),
+                      ),
+                      if (isCurrentWeight)
+                        const Icon(Icons.sync_rounded, size: 14, color: RecordsPalette.steel),
+                    ]),
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+        if (hasValue)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 2),
+            child: Text(
+              isCurrentWeight
+                  ? 'Will be logged to history and set as current weight.'
+                  : 'Will be logged to weight history only.',
+              style: TextStyle(fontSize: 10, color: RecordsPalette.muted.withOpacity(0.8)),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _unitBtn(String label, String current, ValueChanged<String> onChanged) {
+    final sel = current == label;
+    return GestureDetector(
+      onTap: () => onChanged(label),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: sel ? RecordsPalette.steel : Colors.transparent,
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: Text(label,
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                color: sel ? Colors.white : RecordsPalette.muted)),
+      ),
+    );
+  }
+}
+
+class _PetNameBanner extends StatelessWidget {
+  final String petName;
+  const _PetNameBanner({required this.petName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFF546E7A),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(children: [
+        const Icon(Icons.pets, color: Colors.white, size: 15),
+        const SizedBox(width: 8),
+        Text(petName,
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
       ]),
     );
   }

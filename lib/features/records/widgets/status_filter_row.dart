@@ -1,7 +1,40 @@
 import 'package:flutter/material.dart';
 
+/// Maps display label (uppercase) → Firestore value (title-case).
+/// The filter providers and Firestore queries should always use the
+/// Firestore value so they match what is actually stored in the DB.
+const Map<String, String> statusFilterValues = {
+  'ALL':       'ALL',
+  'UPCOMING':  'Upcoming',
+  'ONGOING':   'Ongoing',
+  'OVERDUE':   'Overdue',
+  'COMPLETED': 'Completed',
+};
+
+/// Returns the display label for a given Firestore status value.
+String statusDisplayLabel(String firestoreValue) {
+  return statusFilterValues.entries
+      .firstWhere(
+        (e) => e.value == firestoreValue,
+        orElse: () => MapEntry(firestoreValue.toUpperCase(), firestoreValue),
+      )
+      .key;
+}
+
+/// Returns the color for a status value (accepts both display and Firestore forms).
+Color statusColor(String status) {
+  final normalized = status.toLowerCase();
+  if (normalized == 'completed') return const Color(0xFF388E3C);
+  if (normalized == 'ongoing')   return const Color(0xFFD32F2F);
+  if (normalized == 'overdue')   return const Color(0xFFBD4B4B);
+  if (normalized == 'upcoming')  return const Color(0xFFFFB300);
+  return Colors.grey;
+}
+
 class StatusFilterRow extends StatelessWidget {
+  /// [selectedStatus] should be the **Firestore** value (title-case) or "ALL".
   final String selectedStatus;
+  /// [onStatusSelected] will receive the **Firestore** value (title-case) or "ALL".
   final Function(String) onStatusSelected;
 
   const StatusFilterRow({
@@ -12,12 +45,13 @@ class StatusFilterRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<String> statuses = [
-      "ALL",
-      "UPCOMING",
-      "ONGOING",
-      "OVERDUE",
-      "COMPLETED",
+    // Display order of chips
+    const List<String> labels = [
+      'ALL',
+      'UPCOMING',
+      'ONGOING',
+      'OVERDUE',
+      'COMPLETED',
     ];
 
     return SingleChildScrollView(
@@ -25,9 +59,10 @@ class StatusFilterRow extends StatelessWidget {
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Row(
-        children: statuses.map((status) {
-          final bool isSelected = selectedStatus == status;
-          final Color activeColor = status == "OVERDUE"
+        children: labels.map((label) {
+          final firestoreValue = statusFilterValues[label]!;
+          final bool isSelected = selectedStatus == firestoreValue;
+          final Color activeColor = label == 'OVERDUE'
               ? const Color(0xFFBD4B4B)
               : const Color(0xFF455A64);
 
@@ -36,7 +71,7 @@ class StatusFilterRow extends StatelessWidget {
             child: ChoiceChip(
               showCheckmark: false,
               label: Text(
-                status,
+                label,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w900,
@@ -59,7 +94,7 @@ class StatusFilterRow extends StatelessWidget {
                 ),
               ),
               onSelected: (bool selected) {
-                if (selected) onStatusSelected(status);
+                if (selected) onStatusSelected(firestoreValue);
               },
             ),
           );

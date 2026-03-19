@@ -6,7 +6,8 @@ import 'package:pawfolio/features/auth/providers/auth_provider.dart';
 import '../../../models/pet_model.dart';
 import '../../records/providers/record_provider.dart';
 import '../../records/widgets/add_vet_visit_dialog.dart';
-import '../../records/widgets/status_filter_row.dart';
+import '../../records/widgets/status_filter_row.dart'
+    show StatusFilterRow, statusDisplayLabel, statusColor;
 import '../../records/widgets/edit_records_dialog.dart';
 import '../../records/screen/archived_records_page.dart';
 
@@ -169,27 +170,15 @@ class VetVisitsHistoryView extends ConsumerWidget {
       String? uid, String currentFilter) {
     if (uid == null) return const Center(child: Text("Please log in."));
 
-    // INDEX: date_timestamp DESC, status ASC  → used when filter = ALL
-    // INDEX: is_archived ASC, status ASC, date_timestamp DESC → used when filtered
-    Query query = FirebaseFirestore.instance
+    // Single query — no composite index needed.
+    // is_archived and status are filtered client-side.
+    final Query query = FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
         .collection('pets')
         .doc(pet.petID)
         .collection('vet_visits')
         .orderBy('date_timestamp', descending: true);
-
-    if (currentFilter != "ALL") {
-      query = FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('pets')
-          .doc(pet.petID)
-          .collection('vet_visits')
-          .where('is_archived', isEqualTo: false)
-          .where('status', isEqualTo: currentFilter)
-          .orderBy('date_timestamp', descending: true);
-    }
 
     return StreamBuilder<QuerySnapshot>(
       stream: query.snapshots(),
@@ -203,13 +192,16 @@ class VetVisitsHistoryView extends ConsumerWidget {
         }
 
         final allDocs = snapshot.data?.docs ?? [];
-        final docs = currentFilter == "ALL"
-            ? allDocs
-                .where((d) =>
-                    (d.data() as Map<String, dynamic>)['is_archived'] !=
-                    true)
-                .toList()
-            : allDocs;
+        // Client-side filtering: exclude archived, apply status filter
+        final docs = allDocs.where((d) {
+          final data = d.data() as Map<String, dynamic>;
+          if (data['is_archived'] == true) return false;
+          if (currentFilter != 'ALL') {
+            final status = (data['status'] ?? '').toString();
+            if (status != currentFilter) return false;
+          }
+          return true;
+        }).toList();
 
         if (docs.isEmpty) {
           return const Center(
@@ -238,8 +230,7 @@ class VetVisitsHistoryView extends ConsumerWidget {
               time: extra['time'] ?? data['time'] ?? 'N/A',
               desc: extra['description'] ??
                   data['description'] ?? 'No notes provided.',
-              status: (data['status'] ?? 'UPCOMING')
-                  .toString().toUpperCase(),
+              status: (data['status'] ?? 'Upcoming').toString(),
             );
           },
         );
@@ -255,12 +246,8 @@ class VetVisitsHistoryView extends ConsumerWidget {
     required String time, required String desc,
     required String status,
   }) {
-    Color statusColor;
-    switch (status) {
-      case 'COMPLETED': statusColor = const Color(0xFF008000); break;
-      case 'ONGOING':   statusColor = Colors.redAccent; break;
-      default:          statusColor = Colors.orange;
-    }
+    final badgeColor = statusColor(status);
+    final badgeLabel = statusDisplayLabel(status);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -289,7 +276,7 @@ class VetVisitsHistoryView extends ConsumerWidget {
                 fontWeight: FontWeight.w800, letterSpacing: 0.5)),
           ])),
           Row(children: [
-            _statusBadge(status, statusColor),
+            _statusBadge(badgeLabel, badgeColor),
             if (!pet.isArchived) ...[
               const SizedBox(width: 4),
               IconButton(

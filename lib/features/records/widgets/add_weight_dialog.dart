@@ -8,7 +8,8 @@ import '../theme/records_theme.dart';
 
 void showAddWeightDialog(
   BuildContext context,
-  String petId, {
+  String petId,
+  String petName, {
   VoidCallback? onSaved,
   bool popToHomeOnSave = false,
 }) {
@@ -16,6 +17,7 @@ void showAddWeightDialog(
     context: context,
     builder: (_) => _AddWeightDialog(
       petId: petId,
+      petName: petName,
       onSaved: onSaved,
       popToHomeOnSave: popToHomeOnSave,
     ),
@@ -24,10 +26,12 @@ void showAddWeightDialog(
 
 class _AddWeightDialog extends ConsumerStatefulWidget {
   final String petId;
+  final String petName;
   final VoidCallback? onSaved;
   final bool popToHomeOnSave;
   const _AddWeightDialog({
     required this.petId,
+    required this.petName,
     this.onSaved,
     this.popToHomeOnSave = false,
   });
@@ -42,6 +46,7 @@ class _AddWeightDialogState extends ConsumerState<_AddWeightDialog> {
   late String _dateString;
   String _unit = 'kg';
   bool _saving = false;
+  bool _markAsCurrent = false;
   String? _weightErr;
 
   @override
@@ -64,6 +69,8 @@ class _AddWeightDialogState extends ConsumerState<_AddWeightDialog> {
         _selectedDate.day == now.day;
   }
 
+  bool get _hasValue => _weightCtrl.text.trim().isNotEmpty;
+
   String? _validateWeight(String v) {
     if (v.trim().isEmpty) return 'Weight is required';
     final d = double.tryParse(v.trim());
@@ -74,7 +81,6 @@ class _AddWeightDialogState extends ConsumerState<_AddWeightDialog> {
     return null;
   }
 
-  /// Always stores in kg regardless of display unit.
   double get _weightInKg {
     final val = double.tryParse(_weightCtrl.text.trim()) ?? 0;
     return _unit == 'lbs' ? val / 2.20462 : val;
@@ -96,6 +102,7 @@ class _AddWeightDialogState extends ConsumerState<_AddWeightDialog> {
       setState(() {
         _selectedDate = picked;
         _dateString = DateFormat('dd.MM.yyyy').format(picked);
+        _markAsCurrent = false;
       });
     }
   }
@@ -117,9 +124,10 @@ class _AddWeightDialogState extends ConsumerState<_AddWeightDialog> {
       await ref.read(recordControllerProvider.notifier).addWeightRecord(
             petId: widget.petId,
             weight: _weightInKg,
-            unit: 'kg', // always stored as kg
+            unit: 'kg',
             dateString: _dateString,
             recordedDate: _selectedDate,
+            forceUpdateCurrent: _markAsCurrent, // ✅ ONLY the toggle controls this
           );
 
       if (mounted) {
@@ -163,7 +171,6 @@ class _AddWeightDialogState extends ConsumerState<_AddWeightDialog> {
                         fontWeight: FontWeight.bold,
                         color: RecordsPalette.ink)),
               ),
-              // ── Cancel X (quick-add only) ────────────────
               if (widget.popToHomeOnSave)
                 GestureDetector(
                   onTap: _cancel,
@@ -177,6 +184,8 @@ class _AddWeightDialogState extends ConsumerState<_AddWeightDialog> {
                   ),
                 ),
             ]),
+            const SizedBox(height: 12),
+            _PetNameBanner(petName: widget.petName),
             const SizedBox(height: 20),
 
             // ── Weight input + unit toggle ────────────────
@@ -194,8 +203,12 @@ class _AddWeightDialogState extends ConsumerState<_AddWeightDialog> {
                             RegExp(r'^\d*\.?\d*')),
                       ],
                       autofocus: true,
-                      onChanged: (_) =>
-                          setState(() => _weightErr = null),
+                      onChanged: (_) {
+                        setState(() {
+                          _weightErr = null;
+                          if (!_hasValue) _markAsCurrent = false;
+                        });
+                      },
                       decoration: InputDecoration(
                         labelText: 'Weight',
                         suffixText: _unit,
@@ -230,21 +243,18 @@ class _AddWeightDialogState extends ConsumerState<_AddWeightDialog> {
                 ),
               ),
               const SizedBox(width: 10),
-              // kg / lbs toggle
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: _UnitToggle(
                   unit: _unit,
                   onChanged: (u) {
-                    // Convert displayed value when switching units
                     final current =
                         double.tryParse(_weightCtrl.text.trim());
                     if (current != null && current > 0) {
                       final converted = u == 'lbs'
                           ? current * 2.20462
                           : current / 2.20462;
-                      _weightCtrl.text =
-                          converted.toStringAsFixed(1);
+                      _weightCtrl.text = converted.toStringAsFixed(1);
                     }
                     setState(() {
                       _unit = u;
@@ -293,60 +303,123 @@ class _AddWeightDialogState extends ConsumerState<_AddWeightDialog> {
                 ]),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(top: 8, left: 4),
-              child: Text(
-                _isToday
-                    ? 'This will be marked as your current weight.'
-                    : "Past dates are logged but won't change the current weight.",
-                style: TextStyle(
-                    fontSize: 11,
-                    color: RecordsPalette.muted.withOpacity(0.8)),
-              ),
+            const SizedBox(height: 8),
+
+            // ── Set as current toggle (always visible once value entered) ──
+            AnimatedSize(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeInOut,
+              child: _hasValue
+                  ? GestureDetector(
+                      onTap: () =>
+                          setState(() => _markAsCurrent = !_markAsCurrent),
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _markAsCurrent
+                              ? RecordsPalette.steel.withOpacity(0.08)
+                              : const Color(0xFFF5F5F5),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: _markAsCurrent
+                                ? RecordsPalette.steel
+                                : RecordsPalette.linenDeep,
+                            width: _markAsCurrent ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Row(children: [
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            width: 18,
+                            height: 18,
+                            decoration: BoxDecoration(
+                              color: _markAsCurrent
+                                  ? RecordsPalette.steel
+                                  : Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: _markAsCurrent
+                                    ? RecordsPalette.steel
+                                    : RecordsPalette.linenDeep,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: _markAsCurrent
+                                ? const Icon(Icons.check,
+                                    size: 11, color: Colors.white)
+                                : null,
+                          ),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              'Set as current weight',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: RecordsPalette.ink),
+                            ),
+                          ),
+                          if (_markAsCurrent)
+                            const Icon(Icons.sync_rounded,
+                                size: 14, color: RecordsPalette.steel),
+                        ]),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
             ),
+
+            // ── Hint text ─────────────────────────────────
+            if (_hasValue)
+              Padding(
+                padding: const EdgeInsets.only(top: 6, left: 4),
+                child: Text(
+                  _markAsCurrent
+                      ? 'Will be logged to history and set as current weight.'
+                      : 'Will be logged to weight history only.',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: RecordsPalette.muted.withOpacity(0.8)),
+                ),
+              ),
+
             const SizedBox(height: 20),
 
             // ── Actions ───────────────────────────────────
             Row(children: [
               Expanded(
-                child: GestureDetector(
-                  onTap: _saving ? null : _cancel,
-                  child: Container(
-                    height: 44,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: RecordsPalette.sageLite,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text('Cancel',
-                        style: TextStyle(
-                            color: RecordsPalette.muted,
-                            fontWeight: FontWeight.w600)),
-                  ),
+                child: OutlinedButton(
+                  onPressed: _saving ? null : _cancel,
+                  style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(44),
+                      side: const BorderSide(color: RecordsPalette.linenDeep),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12))),
+                  child: const Text('Cancel',
+                      style: TextStyle(
+                          color: RecordsPalette.muted,
+                          fontWeight: FontWeight.w600)),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: GestureDetector(
-                  onTap: _saving ? null : _save,
-                  child: Container(
-                    height: 44,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: RecordsPalette.steel,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: _saving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2))
-                        : const Text('SAVE',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold)),
-                  ),
+                child: ElevatedButton(
+                  onPressed: _saving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(44),
+                      backgroundColor: RecordsPalette.steel,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12))),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2))
+                      : const Text('SAVE',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
             ]),
@@ -385,8 +458,7 @@ class _UnitToggle extends StatelessWidget {
       onTap: () => onChanged(label),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: sel ? RecordsPalette.steel : Colors.transparent,
           borderRadius: BorderRadius.circular(7),
@@ -397,6 +469,33 @@ class _UnitToggle extends StatelessWidget {
                 fontWeight: FontWeight.w700,
                 color: sel ? Colors.white : RecordsPalette.muted)),
       ),
+    );
+  }
+}
+
+// ── Pet name banner ───────────────────────────────────────────────────────────
+class _PetNameBanner extends StatelessWidget {
+  final String petName;
+  const _PetNameBanner({required this.petName});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFF546E7A),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(children: [
+        const Icon(Icons.pets, color: Colors.white, size: 15),
+        const SizedBox(width: 8),
+        Text(petName,
+            style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 13)),
+      ]),
     );
   }
 }
