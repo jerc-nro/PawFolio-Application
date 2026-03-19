@@ -15,7 +15,6 @@ const _kDivider = Color(0xFFE8DDD6);
 
 class AddPetPage extends ConsumerStatefulWidget {
   final VoidCallback? onComplete;
-  /// Set to false when shown inside _NewUserGate (no back destination).
   final bool showCancel;
 
   const AddPetPage({
@@ -129,6 +128,7 @@ class _AddPetPageState extends ConsumerState<AddPetPage> {
     try {
       final finalBreeds = _resolvedBreeds();
 
+      // ✅ FIXED: Handle photo safely - photo is optional
       await ref.read(petControllerProvider).saveNewPet(
             type:           _petType!,
             selectedBreeds: finalBreeds,
@@ -141,7 +141,7 @@ class _AddPetPageState extends ConsumerState<AddPetPage> {
             unit:           _wgtUnit,
             color:          _colorCtrl.text.trim(),
             description:    _descriptionCtrl.text.trim(),
-            photo:          _photo,
+            photo:          _photo,  // Can be null - that's OK
           );
 
       if (mounted) {
@@ -154,6 +154,7 @@ class _AddPetPageState extends ConsumerState<AddPetPage> {
             color: const Color(0xFF7A8C6A));
       }
     } catch (e) {
+      debugPrint('❌ Save error: $e');
       _snack('Save failed: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -163,9 +164,24 @@ class _AddPetPageState extends ConsumerState<AddPetPage> {
   Future<void> _pickPhoto() async {
     try {
       final file = await PickerService.pickPetPhoto();
-      if (file != null) setState(() => _photo = file);
+      if (file != null) {
+        // ✅ FIXED: Validate file exists before setting
+        if (kIsWeb) {
+          // Web: just set it
+          if (mounted) setState(() => _photo = file);
+        } else {
+          // Mobile: check if file exists
+          final exists = await File(file.path).exists();
+          if (exists) {
+            if (mounted) setState(() => _photo = file);
+          } else {
+            _snack('❌ File not found after selection', color: Colors.red);
+          }
+        }
+      }
     } catch (e) {
-      _snack('Could not pick photo: $e');
+      debugPrint('❌ Photo picker error: $e');
+      _snack('Could not pick photo: $e', color: Colors.red);
     }
   }
 
@@ -232,26 +248,20 @@ class _AddPetPageState extends ConsumerState<AddPetPage> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Background: photo or gradient — entire area is tappable to change photo
+          // Background: photo or gradient
           GestureDetector(
             onTap: _pickPhoto,
             child: hasPhoto
                 ? ClipRect(
                     child: kIsWeb
                         ? Image.network(_photo!.path,
-                            fit: BoxFit.cover, width: double.infinity)
+                            fit: BoxFit.cover, width: double.infinity,
+                            errorBuilder: (_, __, ___) => _placeholderGradient())
                         : Image.file(File(_photo!.path),
-                            fit: BoxFit.cover, width: double.infinity),
+                            fit: BoxFit.cover, width: double.infinity,
+                            errorBuilder: (_, __, ___) => _placeholderGradient()),
                   )
-                : Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Color(0xFF3D5570), _kNavy],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                    ),
-                  ),
+                : _placeholderGradient(),
           ),
 
           // Dark scrim
@@ -270,7 +280,7 @@ class _AddPetPageState extends ConsumerState<AddPetPage> {
             ),
           ),
 
-          // Back / close button — only shown when showCancel=true OR when step > 0
+          // Back button
           SafeArea(
             child: Align(
               alignment: Alignment.topLeft,
@@ -306,7 +316,7 @@ class _AddPetPageState extends ConsumerState<AddPetPage> {
             ),
           ),
 
-          // Bottom-right camera pill button
+          // Camera pill button
           Positioned(
             bottom: 14,
             right: 16,
@@ -346,7 +356,7 @@ class _AddPetPageState extends ConsumerState<AddPetPage> {
             ),
           ),
 
-          // Centered camera icon when no photo
+          // Centered camera icon
           if (!hasPhoto)
             IgnorePointer(
               child: Center(
@@ -380,6 +390,16 @@ class _AddPetPageState extends ConsumerState<AddPetPage> {
       ),
     );
   }
+
+  Widget _placeholderGradient() => Container(
+    decoration: const BoxDecoration(
+      gradient: LinearGradient(
+        colors: [Color(0xFF3D5570), _kNavy],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+    ),
+  );
 
   Widget _buildStepDots() {
     return Row(
